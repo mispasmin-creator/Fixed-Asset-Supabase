@@ -106,7 +106,7 @@ export async function savePoMasterToSupabase(
 
         // Handle email_send_status as BOOLEAN
         if (d.emailSendStatus !== undefined) {
-            row.email_send_status = d.emailSendStatus === 'true' || d.emailSendStatus === true;
+            row.email_send_status = d.emailSendStatus === 'true';
         }
 
         if (d.Guarantee !== undefined) row.guarantee = d.Guarantee;

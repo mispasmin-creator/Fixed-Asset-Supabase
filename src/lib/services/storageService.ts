@@ -45,7 +45,7 @@ export async function uploadFileToSupabase({
 }
 
 // Function to map current Google Drive folder IDs to buckets (heuristic)
-export function getBucketForFolderId(folderId: string): string {
+export function getBucketForFolderId(_folderId: string): string {
     // This mapping depends on how the user was using folders. 
     // Since we don't know the exact IDs, we can default to 'misc' or try to guess from context if passed elsewhere.
     // However, for the `uploadFile` function in fetchers, the user usually passes a folderId from env.
