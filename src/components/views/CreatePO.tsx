@@ -10,6 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import type { PoMasterSheet } from '@/types';
 import { postToSheet, uploadFile } from '@/lib/fetchers';
+import { BUCKETS } from '@/lib/services';
 import { useEffect, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -32,42 +33,33 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { PDFViewer } from '@react-pdf/renderer';
 
 function generatePoNumber(poNumbers: string[]): string {
-  const prefix = 'STORE-PO-25-26-';
-  
-  console.log("🔍 All PO numbers received:", poNumbers);
-  
-  if (!poNumbers || poNumbers.length === 0) {
-    console.log("⚠️ No existing PO numbers, starting from 1");
-    return `${prefix}1`;
-  }
-  
-  // Extract all numbers for this prefix
-  const existingNumbers = poNumbers
-    .filter(po => po && typeof po === 'string' && po.trim() !== '')
-    .map(po => {
-      const poStr = po.trim();
-      
-      // Check if it matches our prefix pattern exactly
-      if (poStr.startsWith(prefix)) {
-        const numberStr = poStr.replace(prefix, '').trim();
-        const num = parseInt(numberStr, 10);
-        console.log(`📝 PO: ${poStr} → Number: ${num}`);
-        return isNaN(num) ? 0 : num;
-      }
-      
-      return 0;
-    })
-    .filter(n => n > 0);
+    const prefix = 'STORE-PO-25-26-';
 
-  console.log("📊 Valid numbers found:", existingNumbers);
+    if (!poNumbers || poNumbers.length === 0) {
+        return `${prefix}1`;
+    }
 
-  // Find highest number and add 1
-  const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-  const nextNumber = maxNumber + 1;
+    // Extract all numbers for this prefix
+    const existingNumbers = poNumbers
+        .filter(po => po && typeof po === 'string' && po.trim() !== '')
+        .map(po => {
+            const poStr = po.trim();
 
-  console.log(`✅ Max: ${maxNumber}, Next: ${nextNumber}, New PO: ${prefix}${nextNumber}`);
+            // Check if it matches our prefix pattern exactly
+            if (poStr.startsWith(prefix)) {
+                const numberStr = poStr.replace(prefix, '').trim();
+                const num = parseInt(numberStr, 10);
+                return isNaN(num) ? 0 : num;
+            }
+            return 0;
+        })
+        .filter(n => n > 0);
 
-  return `${prefix}${nextNumber}`;
+    // Find highest number and add 1
+    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const nextNumber = maxNumber + 1;
+
+    return `${prefix}${nextNumber}`;
 }
 
 function incrementPoRevision(poNumber: string, allPOs: PoMasterSheet[]): string {
@@ -133,8 +125,8 @@ interface MasterDetails {
         vendorName?: string;
         address?: string;
         gstin?: string;
-        vendorEmail?: string;
         email?: string;
+        vendorEmail?: string;
     }>;
     firmCompanyMap?: Record<string, {
         companyName?: string;
@@ -204,7 +196,7 @@ export default () => {
         deliveryDate: z.coerce.date(),
         deliveryDays: z.coerce.number().optional(),
         deliveryType: z.enum(['for', 'exfactory']).optional(),
-        paymentTerms: z.enum(['Party PI / Party Advance', 'Advance', 'After Delivery','Against PI']),
+        paymentTerms: z.enum(['Party PI / Party Advance', 'Advance', 'After Delivery', 'Against PI']),
         numberOfDays: z.coerce.number().optional(),
     });
 
@@ -246,21 +238,20 @@ export default () => {
     const poDate = form.watch('poDate');
     const poNumber = form.watch('poNumber');
 
-const termsArray = useFieldArray({
-    control: form.control,
-    name: 'terms' as never,
-});
+    const termsArray = useFieldArray({
+        control: form.control,
+        name: 'terms' as never,
+    });
 
-const itemsArray = useFieldArray({
-    control: form.control,
-    name: 'indents' as never,
-});
+    const itemsArray = useFieldArray({
+        control: form.control,
+        name: 'indents' as never,
+    });
 
     // Vendor selection effect for CREATE mode
     useEffect(() => {
         if (!vendor || !details || !(details as MasterDetails).vendors || mode !== 'create') return;
 
-        console.log("🔍 Vendor changed:", vendor);
 
         const normalize = (str: string) => str.trim().toLowerCase();
 
@@ -269,11 +260,10 @@ const itemsArray = useFieldArray({
         );
 
         if (selectedVendor) {
-            console.log("✅ Matched vendor:", selectedVendor);
 
             form.setValue('supplierAddress', selectedVendor.address || '', { shouldValidate: true });
             form.setValue('gstin', selectedVendor.gstin || '', { shouldValidate: true });
-            form.setValue('companyEmail', selectedVendor.vendorEmail || '', { shouldValidate: true });
+            form.setValue('companyEmail', selectedVendor.email || selectedVendor.vendorEmail || '', { shouldValidate: true });
         } else {
             console.warn("⚠️ Vendor not found in master list:", vendor);
             form.setValue('supplierAddress', '', { shouldValidate: true });
@@ -281,13 +271,19 @@ const itemsArray = useFieldArray({
             form.setValue('companyEmail', '', { shouldValidate: true });
         }
 
-        const matchingIndents = indentSheet.filter((i: IndentSheetItem) =>
-            i.planned4 !== '' &&
-            i.actual4 === '' &&
-            normalize(i.approvedVendorName || '') === normalize(vendor)
+        // Get all indent numbers that already have a PO in PO MASTER
+        const indentsWithPOs = new Set(
+            poMasterSheet
+                .map(po => po.internalCode)
+                .filter(code => code && code.trim() !== '')
         );
 
-        console.log("📦 Matching indents found:", matchingIndents.length);
+        const matchingIndents = indentSheet.filter((i: IndentSheetItem) =>
+            i.planned4 &&
+            !i.actual4 &&
+            normalize(i.approvedVendorName || '') === normalize(vendor) &&
+            !indentsWithPOs.has(i.indentNumber || '')
+        );
 
         const firmName = matchingIndents[0]?.firmName?.trim();
         if (firmName && (details as MasterDetails).firmCompanyMap) {
@@ -303,12 +299,7 @@ const itemsArray = useFieldArray({
                 setDestinationAddress(
                     companyDetails.destinationAddress || (details as MasterDetails).destinationAddress || ''
                 );
-                console.log("✅ Firm/company details loaded:", companyDetails);
             } else {
-                console.log("⚠️ Firm not found in firmCompanyMap:", firmName);
-                setFirmCompanyName((details as MasterDetails).companyName || '');
-                setFirmCompanyAddress((details as MasterDetails).companyAddress || '');
-                setDestinationAddress((details as MasterDetails).destinationAddress || '');
             }
         }
 
@@ -316,14 +307,14 @@ const itemsArray = useFieldArray({
             'indents',
             matchingIndents.map((i: IndentSheetItem) => {
                 let gstValue: number | undefined = undefined;
-                
+
                 if (i.taxValue1 && !isNaN(Number(i.taxValue1)) && Number(i.taxValue1) > 0) {
                     gstValue = Number(i.taxValue1);
                 }
                 else if (i.taxValue4 && !isNaN(Number(i.taxValue4)) && Number(i.taxValue4) > 0) {
                     gstValue = Number(i.taxValue4);
                 }
-                
+
                 return {
                     indentNumber: i.indentNumber || '',
                     productName: i.productName || '',
@@ -343,8 +334,7 @@ const itemsArray = useFieldArray({
 
     // Mode change effect
     useEffect(() => {
-        console.log("🔄 Mode changed to:", mode, "PO Master Sheet count:", poMasterSheet.length);
-        
+
         if (mode === 'revise') {
             form.reset({
                 poNumber: '',
@@ -369,11 +359,9 @@ const itemsArray = useFieldArray({
         } else {
             if (poMasterSheet && poMasterSheet.length > 0) {
                 const poNumbers = poMasterSheet.map((p) => p.poNumber).filter(po => po && po.trim() !== '');
-                console.log("📋 Available PO numbers for generation:", poNumbers);
-                
+
                 const newPoNumber = generatePoNumber(poNumbers);
-                console.log("🎯 Final generated PO number:", newPoNumber);
-                
+
                 form.reset({
                     poNumber: newPoNumber,
                     poDate: new Date(),
@@ -395,7 +383,6 @@ const itemsArray = useFieldArray({
                     description: '',
                 });
             } else {
-                console.log("📝 No PO data available, using default PO number");
                 form.reset({
                     poNumber: 'STORE-PO-25-26-1',
                     poDate: new Date(),
@@ -423,14 +410,11 @@ const itemsArray = useFieldArray({
     // REVISE MODE - Load PO data when PO number is selected
     useEffect(() => {
         if (mode === 'revise' && poNumber && poNumber.trim() !== '') {
-            console.log("🔄 REVISE MODE: Loading PO data for:", poNumber);
-            
+
             const poItems = poMasterSheet.filter((p) => p.poNumber === poNumber);
-            console.log("📦 Found PO items:", poItems.length);
 
             if (poItems.length > 0) {
                 const firstPoItem = poItems[0];
-                console.log("📄 First PO Item:", firstPoItem);
 
                 const vendor = (details as MasterDetails)?.vendors?.find((v) => {
                     const vendorName = v.vendorName?.toLowerCase()?.trim();
@@ -438,12 +422,10 @@ const itemsArray = useFieldArray({
                     return vendorName === partyName;
                 });
 
-                console.log("🔍 Looking for vendor:", firstPoItem.partyName);
-                console.log("✅ Found vendor details:", vendor);
 
                 form.setValue('poDate', new Date(firstPoItem.timestamp || new Date()));
                 form.setValue('supplierName', firstPoItem.partyName || '');
-                
+
                 if (vendor) {
                     form.setValue('supplierAddress', vendor.address || '');
                     form.setValue('gstin', vendor.gstin || '');
@@ -457,7 +439,7 @@ const itemsArray = useFieldArray({
                     form.setValue('gstin', storedGstin);
                     form.setValue('companyEmail', storedEmail);
                 }
-                
+
                 form.setValue('quotationNumber', firstPoItem.quotationNumber || '');
                 form.setValue('quotationDate', firstPoItem.quotationDate ? new Date(firstPoItem.quotationDate) : new Date());
                 form.setValue('description', firstPoItem.description || '');
@@ -480,7 +462,6 @@ const itemsArray = useFieldArray({
                     rate: poItem.rate || 0,
                 }));
 
-                console.log("✅ Loaded indents:", poIndents);
                 form.setValue('indents', poIndents);
 
                 const terms = [];
@@ -493,7 +474,6 @@ const itemsArray = useFieldArray({
                 }
                 form.setValue('terms', terms.length > 0 ? terms : ((details as MasterDetails)?.defaultTerms || []));
 
-                console.log("✅ PO data loaded successfully for revision");
             }
         }
     }, [poNumber, mode, poMasterSheet, details, form]);
@@ -510,7 +490,7 @@ const itemsArray = useFieldArray({
 
     async function generatePreviewData(): Promise<POPdfProps> {
         const values = form.getValues();
-        
+
         const grandTotal = calculateGrandTotal(
             values.indents.map((indent) => ({
                 quantity: indent.quantity || 0,
@@ -591,222 +571,238 @@ const itemsArray = useFieldArray({
         }
     }
 
-   async function onSubmit(values: FormData) {
-    try {
-        const poNumber = mode === 'create' ? values.poNumber : incrementPoRevision(values.poNumber, poMasterSheet);
-        const grandTotal = calculateGrandTotal(
-            values.indents.map((indent) => ({
-                quantity: indent.quantity || 0,
-                rate: indent.rate || 0,
-                discountPercent: indent.discount || 0,
-                gstPercent: indent.gst || 0,
-            }))
-        );
-
-        // Convert logo image to base64 for PDF
-        const logoResponse = await fetch('/logo.png');
-        const logoBlob = await logoResponse.blob();
-        const logoBase64 = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(logoBlob);
-        });
-
-        const pdfProps: POPdfProps = {
-            companyName: firmCompanyName || (details as MasterDetails)?.companyName || '',
-            companyPhone: (details as MasterDetails)?.companyPhone || '',
-            companyGstin: (details as MasterDetails)?.companyGstin || '',
-            companyPan: (details as MasterDetails)?.companyPan || '',
-            companyAddress: firmCompanyAddress || (details as MasterDetails)?.companyAddress || '',
-            billingAddress: firmCompanyAddress || (details as MasterDetails)?.billingAddress || '',
-            destinationAddress: destinationAddress || (details as MasterDetails)?.destinationAddress || '',
-            supplierName: values.supplierName,
-            supplierAddress: values.supplierAddress,
-            supplierGstin: values.gstin,
-            orderNumber: poNumber,
-            orderDate: formatDate(values.poDate),
-            deliveryDate: formatDate(values.deliveryDate),
-            quotationNumber: values.quotationNumber,
-            quotationDate: formatDate(values.quotationDate),
-            enqNo: values.ourEnqNo,
-            enqDate: formatDate(values.enquiryDate),
-            description: values.description,
-
-            items: values.indents.map((item) => {
-                const indent = indentSheet.find((i: IndentSheetItem) => i.indentNumber === item.indentNumber);
-                return {
-                    internalCode: indent?.indentNumber || item.indentNumber,
-                    product: item.productName || indent?.productName || '',
-                    description: item.specifications || indent?.specifications || '',
-                    quantity: item.quantity || 0,
-                    unit: item.unit || '',
-                    rate: item.rate || 0,
-                    gst: item.gst || 0,
-                    discount: item.discount || 0,
-                    amount: calculateTotal(
-                        item.rate || 0,
-                        item.gst || 0,
-                        item.discount || 0,
-                        item.quantity || 0
-                    ),
-                };
-            }),
-            total: calculateSubtotal(
+    async function onSubmit(values: FormData) {
+        try {
+            const poNumber = mode === 'create' ? values.poNumber : incrementPoRevision(values.poNumber, poMasterSheet);
+            const grandTotal = calculateGrandTotal(
                 values.indents.map((indent) => ({
                     quantity: indent.quantity || 0,
                     rate: indent.rate || 0,
                     discountPercent: indent.discount || 0,
+                    gstPercent: indent.gst || 0,
                 }))
-            ),
-            gstAmount: calculateTotalGst(
-                values.indents.map((indent) => ({
-                    quantity: indent.quantity || 0,
-                    rate: indent.rate || 0,
-                    discountPercent: indent.discount || 0,
-                    gstPercent: indent.gst,
-                }))
-            ),
-            grandTotal: grandTotal,
-            terms: values.terms,
-            preparedBy: user.username || 'Unknown',
-            approvedBy: 'Sayan Das',
-        };
+            );
 
-        const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
-        const file = new File([blob], `PO-${poNumber}.pdf`, {
-            type: 'application/pdf',
-        });
+            // Convert logo image to base64 for PDF
+            const logoResponse = await fetch('/logo.png');
+            const logoBlob = await logoResponse.blob();
+            const logoBase64 = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(logoBlob);
+            });
 
-        const email = (details as MasterDetails)?.vendors?.find((v) => v.vendorName === values.supplierName)?.email;
-
-        const uploadParams: {
-            file: File;
-            folderId: string;
-            uploadType?: 'upload' | 'email';
-            email?: string;
-            emailSubject?: string;
-            emailBody?: string;
-        } = {
-            file,
-            folderId: import.meta.env.VITE_PURCHASE_ORDERS_FOLDER || '',
-            uploadType: 'upload',
-        };
-
-        if (email && email.trim() && email.includes('@')) {
-            uploadParams.uploadType = 'email';
-            uploadParams.email = email;
-            uploadParams.emailSubject = `Purchase Order - ${poNumber}`;
-            uploadParams.emailBody = `Please find attached Purchase Order ${poNumber}`;
-        }
-
-        const url = await uploadFile(uploadParams);
-
-        const rows: any[] = values.indents.map((v) => {
-            const indent = indentSheet.find((i: IndentSheetItem) => i.indentNumber === v.indentNumber);
-
-            const formatDateTime = (date: Date) => {
-                const pad = (n: number) => n.toString().padStart(2, '0');
-                return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date
-                    .getFullYear()
-                    .toString()
-                    .slice(-2)} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
-                        date.getSeconds()
-                    )}`;
-            };
-
-            // ✅ CRITICAL: Use field names that match Google Sheets column headers
-            const rowData: any = {
-                timestamp: formatDateTime(values.poDate),
-                partyName: values.supplierName,
-                poNumber: poNumber,
-                internalCode: v.indentNumber,
-                product: v.productName || indent?.productName || '',
-                description: values.description,
-                quantity: v.quantity || 0,
-                unit: v.unit || '',
-                rate: v.rate || 0,
-                gst: v.gst,
-                companyEmail: values.companyEmail || '',
-                discount: v.discount || 0,
-                amount: calculateTotal(
-                    v.rate || 0,
-                    v.gst,
-                    v.discount || 0,
-                    v.quantity || 0
-                ),
-                totalPoAmount: grandTotal,
-                pdf: url,
+            const pdfProps: POPdfProps = {
+                companyName: firmCompanyName || (details as MasterDetails)?.companyName || '',
+                companyPhone: (details as MasterDetails)?.companyPhone || '',
+                companyGstin: (details as MasterDetails)?.companyGstin || '',
+                companyPan: (details as MasterDetails)?.companyPan || '',
+                companyAddress: firmCompanyAddress || (details as MasterDetails)?.companyAddress || '',
+                billingAddress: firmCompanyAddress || (details as MasterDetails)?.billingAddress || '',
+                destinationAddress: destinationAddress || (details as MasterDetails)?.destinationAddress || '',
+                supplierName: values.supplierName,
+                supplierAddress: values.supplierAddress,
+                supplierGstin: values.gstin,
+                orderNumber: poNumber,
+                orderDate: formatDate(values.poDate),
+                deliveryDate: formatDate(values.deliveryDate),
                 quotationNumber: values.quotationNumber,
-                quotationDate: formatDateTime(values.quotationDate),
-                enquiryNumber: values.ourEnqNo,
-                enquiryDate: formatDateTime(values.enquiryDate),
-                term1: values.terms[0] || '',
-                term2: values.terms[1] || '',
-                term3: values.terms[2] || '',
-                term4: values.terms[3] || '',
-                term5: values.terms[4] || '',
-                term6: values.terms[5] || '',
-                term7: values.terms[6] || '',
-                term8: values.terms[7] || '',
-                term9: values.terms[8] || '',
-                term10: values.terms[9] || '',
-                discountPercent: v.discount || 0,
-                gstPercent: v.gst,
-                deliveryDate: formatDateTime(values.deliveryDate),
-                paymentTerms: values.paymentTerms,
-                numberOfDays: values.numberOfDays || 0,
-                deliveryDays: values.deliveryDays || 0,
-                deliveryType: values.deliveryType || '',
-                firmNameMatch: (indent as any)?.firmNameMatch ?? '',
+                quotationDate: formatDate(values.quotationDate),
+                enqNo: values.ourEnqNo,
+                enqDate: formatDate(values.enquiryDate),
+                description: values.description,
+
+                items: values.indents.map((item) => {
+                    const indent = indentSheet.find((i: IndentSheetItem) => i.indentNumber === item.indentNumber);
+                    return {
+                        internalCode: indent?.indentNumber || item.indentNumber,
+                        product: item.productName || indent?.productName || '',
+                        description: item.specifications || indent?.specifications || '',
+                        quantity: item.quantity || 0,
+                        unit: item.unit || '',
+                        rate: item.rate || 0,
+                        gst: item.gst || 0,
+                        discount: item.discount || 0,
+                        amount: calculateTotal(
+                            item.rate || 0,
+                            item.gst || 0,
+                            item.discount || 0,
+                            item.quantity || 0
+                        ),
+                    };
+                }),
+                total: calculateSubtotal(
+                    values.indents.map((indent) => ({
+                        quantity: indent.quantity || 0,
+                        rate: indent.rate || 0,
+                        discountPercent: indent.discount || 0,
+                    }))
+                ),
+                gstAmount: calculateTotalGst(
+                    values.indents.map((indent) => ({
+                        quantity: indent.quantity || 0,
+                        rate: indent.rate || 0,
+                        discountPercent: indent.discount || 0,
+                        gstPercent: indent.gst,
+                    }))
+                ),
+                grandTotal: grandTotal,
+                terms: values.terms,
+                preparedBy: user.username || 'Unknown',
+                approvedBy: 'Sayan Das',
             };
 
-            // ✅ ADD: Guarantee and Freight Payment fields
-            // Use the exact field names that match your Google Sheets columns
-            if (values.Guarantee) {
-                rowData['Guarantee'] = values.Guarantee;
-            }
-            if (values['Freight Payment']) {
-                rowData['Freight Payment'] = values['Freight Payment'];
+            const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
+            const file = new File([blob], `PO-${poNumber}.pdf`, {
+                type: 'application/pdf',
+            });
+
+            const email = (details as MasterDetails)?.vendors?.find((v) => v.vendorName === values.supplierName)?.email;
+
+            const uploadParams: {
+                file: File;
+                folderId: string;
+                uploadType?: 'upload' | 'email';
+                email?: string;
+                emailSubject?: string;
+                emailBody?: string;
+                bucket?: string;
+            } = {
+                file,
+                folderId: import.meta.env.VITE_PURCHASE_ORDERS_FOLDER || '',
+                uploadType: 'upload',
+                bucket: BUCKETS.PURCHASE_ORDERS
+            };
+
+            if (email && email.trim() && email.includes('@')) {
+                uploadParams.uploadType = 'email';
+                uploadParams.email = email;
+                uploadParams.emailSubject = `Purchase Order - ${poNumber}`;
+                uploadParams.emailBody = `Please find attached Purchase Order ${poNumber}`;
             }
 
-            console.log("📦 Final row data being sent:", rowData);
-            return rowData;
-        });
+            const url = await uploadFile(uploadParams);
 
-        await postToSheet(rows, 'insert', 'PO MASTER');
-        toast.success(`Successfully ${mode}d purchase order`);
-        form.reset();
-        setTimeout(() => {
-            updatePoMasterSheet();
-            updateIndentSheet();
-        }, 1000);
-    } catch (e) {
-        console.log("❌ Error submitting PO:", e);
-        toast.error(`Failed to ${mode} purchase order`);
+            const rows: any[] = values.indents.map((v) => {
+                const indent = indentSheet.find((i: IndentSheetItem) => i.indentNumber === v.indentNumber);
+
+                const formatDateTime = (date: Date) => {
+                    if (!date || isNaN(date.getTime())) return null;
+                    return date.toISOString();
+                };
+
+                // ✅ CRITICAL: Use field names that match Google Sheets column headers
+                const rowData: any = {
+                    timestamp: formatDateTime(values.poDate),
+                    partyName: values.supplierName,
+                    poNumber: poNumber,
+                    internalCode: v.indentNumber,
+                    product: v.productName || indent?.productName || '',
+                    description: values.description,
+                    quantity: v.quantity || 0,
+                    unit: v.unit || '',
+                    rate: v.rate || 0,
+                    gst: v.gst,
+                    discount: v.discount || 0,
+                    amount: calculateTotal(
+                        v.rate || 0,
+                        v.gst,
+                        v.discount || 0,
+                        v.quantity || 0
+                    ),
+                    totalPoAmount: grandTotal,
+                    pdf: url,
+                    quotationNumber: values.quotationNumber,
+                    quotationDate: formatDateTime(values.quotationDate),
+                    enquiryNumber: values.ourEnqNo,
+                    enquiryDate: formatDateTime(values.enquiryDate),
+                    term1: values.terms[0] || '',
+                    term2: values.terms[1] || '',
+                    term3: values.terms[2] || '',
+                    term4: values.terms[3] || '',
+                    term5: values.terms[4] || '',
+                    term6: values.terms[5] || '',
+                    term7: values.terms[6] || '',
+                    term8: values.terms[7] || '',
+                    term9: values.terms[8] || '',
+                    term10: values.terms[9] || '',
+                    discountPercent: v.discount || 0,
+                    gstPercent: v.gst,
+                    deliveryDate: formatDateTime(values.deliveryDate),
+                    paymentTerms: values.paymentTerms,
+                    numberOfDays: values.numberOfDays || 0,
+                    deliveryDays: values.deliveryDays || 0,
+                    deliveryType: values.deliveryType || '',
+                    firmNameMatch: (indent as any)?.firmNameMatch ?? '',
+                    preparedBy: user.username || 'Unknown',
+                    approvedBy: 'Sayan Das',
+                    emailSendStatus: 'false',
+                    status: 'Pending',
+                    totalPaidAmount: 0,
+                    outstandingAmount: grandTotal,
+                };
+
+                // ✅ ADD: Guarantee and Freight Payment fields
+                // Use the exact field names that match your Google Sheets columns
+                if (values.Guarantee) {
+                    rowData['Guarantee'] = values.Guarantee;
+                }
+                if (values['Freight Payment']) {
+                    rowData['Freight Payment'] = values['Freight Payment'];
+                }
+
+                return rowData;
+            });
+
+            await postToSheet(rows, 'insert', 'PO MASTER');
+
+            // ✅ Update indents with actual4 completion timestamp and PO number
+            const indentUpdates = values.indents.map((v) => {
+                const indent = indentSheet.find((i: IndentSheetItem) => i.indentNumber === v.indentNumber);
+                return {
+                    rowIndex: indent?.rowIndex,
+                    indentNumber: v.indentNumber,
+                    actual4: new Date().toISOString(),
+                    poNumber: poNumber,
+                    deliveryDate: values.deliveryDate.toISOString(),
+                };
+            }).filter(u => u.rowIndex);
+
+            if (indentUpdates.length > 0) {
+                await postToSheet(indentUpdates, 'update', 'INDENT');
+            }
+
+            toast.success(`Successfully ${mode}d purchase order`);
+            form.reset();
+            setTimeout(() => {
+                updatePoMasterSheet();
+                updateIndentSheet();
+            }, 1000);
+        } catch (e) {
+            toast.error(`Failed to ${mode} purchase order`);
+        }
     }
-}
 
-    function onError(e: any) {
-        console.log(e);
+    function onError() {
         toast.error('Please fill all required fields');
     }
 
     return (
         <div className="grid place-items-center w-full bg-gradient-to-br from-blue-100 via-purple-50 to-blue-50 rounder-md">
-           <div className="flex justify-center items-center p-5 w-full relative">
-    <div className="flex gap-2 items-center">
-        <FilePlus2 size={40} className="text-primary" />
-        <div className="text-center">
-            <h1 className="text-2xl font-bold text-primary">Create or Revise PO</h1>
-            <p className="text-muted-foreground text-sm">
-                Create purchase order for indents or revise previous orders
-            </p>
-        </div>
-    </div>
-    <div className="absolute right-5">
-        <SidebarTrigger />
-    </div>
-</div>
+            <div className="flex justify-center items-center p-5 w-full relative">
+                <div className="flex gap-2 items-center">
+                    <FilePlus2 size={40} className="text-primary" />
+                    <div className="text-center">
+                        <h1 className="text-2xl font-bold text-primary">Create or Revise PO</h1>
+                        <p className="text-muted-foreground text-sm">
+                            Create purchase order for indents or revise previous orders
+                        </p>
+                    </div>
+                </div>
+                <div className="absolute right-5">
+                    <SidebarTrigger />
+                </div>
+            </div>
             <div className="sm:p-4 max-w-6xl">
                 <div className="w-full">
                     <Tabs defaultValue="create" onValueChange={(v) => setMode(v === 'create' ? v : 'revise')}>
@@ -879,7 +875,7 @@ const itemsArray = useFieldArray({
                                         <FormItem>
                                             <FormLabel>PO Date</FormLabel>
                                             <FormControl>
-                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''} 
+                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''}
                                                     onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                                             </FormControl>
                                         </FormItem>
@@ -899,11 +895,37 @@ const itemsArray = useFieldArray({
                                                             </SelectTrigger>
                                                         </FormControl>
                                                         <SelectContent>
-                                                            {[...new Map(indentSheet.filter((i: IndentSheetItem) => i.approvedVendorName && i.approvedVendorName.trim() !== '' && i.planned4 !== '' && i.actual4 === '').map((i) => [i.approvedVendorName, i])).values()].map((i, k) => (
-                                                                <SelectItem key={k} value={i.approvedVendorName}>
-                                                                    {i.approvedVendorName}
-                                                                </SelectItem>
-                                                            ))}
+                                                            {(() => {
+                                                                // Get all indent numbers that already have a PO in PO MASTER
+                                                                const indentsWithPOs = new Set(
+                                                                    poMasterSheet
+                                                                        .map(po => po.internalCode)
+                                                                        .filter(code => code && code.trim() !== '')
+                                                                );
+
+                                                                const filtered = indentSheet.filter((i: IndentSheetItem) => {
+                                                                    // Defensive check for empty/missing planned4/actual4
+                                                                    const hasPlanned = i.planned4 && i.planned4 !== 'null' && i.planned4 !== 'undefined';
+                                                                    const noActual = !i.actual4 || i.actual4 === '' || i.actual4 === 'null';
+
+                                                                    // Match either approvedVendorName or if it's missing, maybe check other vendor fields?
+                                                                    // But for PO we definitely need an approved vendor name.
+                                                                    const hasVendor = i.approvedVendorName && i.approvedVendorName.trim() !== '';
+
+                                                                    // Cross-reference with PO MASTER: Indent number must NOT already exist in PO MASTER
+                                                                    const noPOCreated = !indentsWithPOs.has(i.indentNumber || '');
+
+                                                                    return hasPlanned && noActual && hasVendor && noPOCreated;
+                                                                });
+
+                                                                const uniqueVendors = [...new Map(filtered.map((i) => [i.approvedVendorName, i])).values()];
+
+                                                                return uniqueVendors.map((i, k) => (
+                                                                    <SelectItem key={k} value={i.approvedVendorName || ""}>
+                                                                        {i.approvedVendorName}
+                                                                    </SelectItem>
+                                                                ));
+                                                            })()}
                                                         </SelectContent>
                                                     </Select>
                                                 </FormControl>
@@ -918,37 +940,37 @@ const itemsArray = useFieldArray({
                                         </FormItem>
                                     )} />
                                     <FormField control={form.control} name="supplierAddress" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Supplier Address</FormLabel>
-                                    <FormControl>
-                                        <Input className="h-9" placeholder="Enter supplier address" {...field} value={field.value || ''} />
-                                    </FormControl>
-                                </FormItem>
-                            )} />
-                                                            <FormField control={form.control} name="gstin" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>GSTIN</FormLabel>
-                                    <FormControl>
-                                        <Input className="h-9" placeholder="Enter GSTIN" {...field} value={field.value || ''} />
-                                    </FormControl>
-                                </FormItem>
-                            )} />
-                                                            </div>
-                                                            <div className="grid grid-cols-3 gap-x-5">
-                                                                <FormField control={form.control} name="companyEmail" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Company Email</FormLabel>
-                                    <FormControl>
-                                        <Input 
-                                            className="h-9" 
-                                            type="email"
-                                            placeholder="Enter company email" 
-                                            {...field} 
-                                            value={field.value || ''} 
-                                        />
-                                    </FormControl>
-                                </FormItem>
-                            )} />
+                                        <FormItem>
+                                            <FormLabel>Supplier Address</FormLabel>
+                                            <FormControl>
+                                                <Input className="h-9" placeholder="Enter supplier address" {...field} value={field.value || ''} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={form.control} name="gstin" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>GSTIN</FormLabel>
+                                            <FormControl>
+                                                <Input className="h-9" placeholder="Enter GSTIN" {...field} value={field.value || ''} />
+                                            </FormControl>
+                                        </FormItem>
+                                    )} />
+                                </div>
+                                <div className="grid grid-cols-3 gap-x-5">
+                                    <FormField control={form.control} name="companyEmail" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Company Email</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    className="h-9"
+                                                    type="email"
+                                                    placeholder="Enter company email"
+                                                    {...field}
+                                                    value={field.value || ''}
+                                                />
+                                            </FormControl>
+                                        </FormItem>
+                                    )} />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-x-5">
@@ -964,7 +986,7 @@ const itemsArray = useFieldArray({
                                         <FormItem>
                                             <FormLabel>Quotation Date</FormLabel>
                                             <FormControl>
-                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''} 
+                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''}
                                                     onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                                             </FormControl>
                                         </FormItem>
@@ -984,7 +1006,7 @@ const itemsArray = useFieldArray({
                                         <FormItem>
                                             <FormLabel>Enquiry Date</FormLabel>
                                             <FormControl>
-                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''} 
+                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''}
                                                     onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                                             </FormControl>
                                         </FormItem>
@@ -993,7 +1015,7 @@ const itemsArray = useFieldArray({
                                         <FormItem>
                                             <FormLabel>Delivery Date</FormLabel>
                                             <FormControl>
-                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''} 
+                                                <Input className="h-9" type="date" value={field.value ? field.value.toISOString().split('T')[0] : ''}
                                                     onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)} />
                                             </FormControl>
                                         </FormItem>
@@ -1032,41 +1054,41 @@ const itemsArray = useFieldArray({
                                     )} />
                                 )}
                             </div>
-                           <div className="grid grid-cols-2 gap-x-5">
-    <FormField control={form.control} name="Freight Payment" render={({ field }) => (
-        <FormItem>
-            <FormLabel>Freight Payment</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value || ""}>
-                <FormControl>
-                    <SelectTrigger size="sm" className="w-full h-9">
-                        <SelectValue placeholder="Select freight payment" />
-                    </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-            </Select>
-        </FormItem>
-    )} />
-    
-    <FormField control={form.control} name="Guarantee" render={({ field }) => (
-        <FormItem>
-            <FormLabel>Guarantee</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value || ""}>
-                <FormControl>
-                    <SelectTrigger size="sm" className="w-full h-9">
-                        <SelectValue placeholder="Select guarantee" />
-                    </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-            </Select>
-        </FormItem>
-    )} />
-</div>
+                            <div className="grid grid-cols-2 gap-x-5">
+                                <FormField control={form.control} name="Freight Payment" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Freight Payment</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                                            <FormControl>
+                                                <SelectTrigger size="sm" className="w-full h-9">
+                                                    <SelectValue placeholder="Select freight payment" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="yes">Yes</SelectItem>
+                                                <SelectItem value="no">No</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormItem>
+                                )} />
+
+                                <FormField control={form.control} name="Guarantee" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Guarantee</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                                            <FormControl>
+                                                <SelectTrigger size="sm" className="w-full h-9">
+                                                    <SelectValue placeholder="Select guarantee" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="yes">Yes</SelectItem>
+                                                <SelectItem value="no">No</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormItem>
+                                )} />
+                            </div>
 
 
 
@@ -1083,7 +1105,7 @@ const itemsArray = useFieldArray({
                                         <p><span className="font-medium">Pan No.</span> {(details as MasterDetails)?.companyPan}</p>
                                     </CardContent>
                                 </Card>
-                                
+
                                 <Card className="p-0 gap-0 shadow-xs rounded-[3px]">
                                     <CardHeader className="bg-muted px-5 py-2">
                                         <CardTitle className="text-center">Billing Address</CardTitle>
@@ -1099,13 +1121,13 @@ const itemsArray = useFieldArray({
                                         )}
                                     </CardContent>
                                 </Card>
-                                
+
                                 <Card className="p-0 gap-0 shadow-xs rounded-[3px]">
                                     <CardHeader className="bg-muted px-5 py-2">
                                         <CardTitle className="text-center flex items-center justify-between">
                                             Destination Address
                                             {vendor && (
-                                                <Button type="button" variant="ghost" size="sm" 
+                                                <Button type="button" variant="ghost" size="sm"
                                                     onClick={isEditingDestination ? handleDestinationSave : handleDestinationEdit}
                                                     className="h-6 w-6 p-0 hover:bg-gray-200">
                                                     {isEditingDestination ? (
@@ -1187,7 +1209,7 @@ const itemsArray = useFieldArray({
                                             {itemsArray.fields.map((field, index) => {
                                                 const formValue = form.watch(`indents.${index}`);
                                                 const amount = calculateTotal(formValue?.rate || 0, formValue?.gst || 0, formValue?.discount || 0, formValue?.quantity || 0);
-                                                
+
                                                 return (
                                                     <TableRow key={field.id}>
                                                         <TableCell>{index + 1}</TableCell>
@@ -1374,9 +1396,9 @@ const itemsArray = useFieldArray({
                             <Button type="reset" variant="outline" onClick={() => form.reset()}>
                                 Reset
                             </Button>
-                            <Button 
-                                type="button" 
-                                variant="secondary" 
+                            <Button
+                                type="button"
+                                variant="secondary"
                                 onClick={handlePreview}
                                 disabled={!vendor || indents.length === 0}
                             >
@@ -1397,9 +1419,9 @@ const itemsArray = useFieldArray({
                                 </DialogHeader>
                                 <div className="w-full h-[calc(95vh-70px)]">
                                     {previewData && (
-                                        <PDFViewer 
-                                            width="100%" 
-                                            height="100%" 
+                                        <PDFViewer
+                                            width="100%"
+                                            height="100%"
                                             showToolbar={true}
                                             style={{ border: 'none' }}
                                         >

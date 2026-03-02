@@ -1,4 +1,4 @@
-import { fetchSheet } from '@/lib/fetchers';
+import { fetchSheet, postToSheet } from '@/lib/fetchers';
 import type {
     IndentSheet,
     InventorySheet,
@@ -8,7 +8,6 @@ import type {
     StoreInSheet,
     IssueSheet,
     TallyEntrySheet,
-    PcReportSheet,
     FullkittingSheet,
     PaymentHistory,
     PIApprovalSheet,  // ✅ CORRECT
@@ -26,7 +25,6 @@ interface SheetsState {
     updateIssueSheet: () => void;
     updateStoreInSheet: () => void;
     updateTallyEntrySheet: () => void;
-    updatePcReportSheet: () => void;
     updateFullkittingSheet: () => void;
     updatePaymentHistorySheet: () => void;
     updatePIApprovalSheet: () => void;  // ✅ CORRECT
@@ -39,7 +37,6 @@ interface SheetsState {
     poMasterSheet: PoMasterSheet[];
     receivedSheet: ReceivedSheet[];
     inventorySheet: InventorySheet[];
-    pcReportSheet: PcReportSheet[];
     masterSheet: MasterSheet | undefined;
     issueSheet: IssueSheet[];
     tallyEntrySheet: TallyEntrySheet[];
@@ -72,7 +69,6 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
     const [inventorySheet, setInventorySheet] = useState<InventorySheet[]>([]);
     const [masterSheet, setMasterSheet] = useState<MasterSheet>();
     const [tallyEntrySheet, setTallyEntrySheet] = useState<TallyEntrySheet[]>([]);
-    const [pcReportSheet, setPcReportSheet] = useState<PcReportSheet[]>([]);
     const [fullkittingSheet, setFullkittingSheet] = useState<FullkittingSheet[]>([]);
     const [issueSheet, setIssueSheet] = useState<IssueSheet[]>([]);
     const [paymentHistorySheet, setPaymentHistorySheet] = useState<PaymentHistory[]>([]);
@@ -98,7 +94,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
         setPIApprovalLoading(true);
         fetchSheet('PI APPROVAL')
             .then((res) => {
-        setPIApprovalSheet(res as unknown as PIApprovalSheet[]);  // ✅ FIXED
+                setPIApprovalSheet(res as unknown as PIApprovalSheet[]);  // ✅ FIXED
                 setPIApprovalLoading(false);
             })
             .catch((error) => {
@@ -205,47 +201,37 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
             });
     }
 
-    function updatePcReportSheet() {
-        fetchSheet('PC REPORT')
-            .then((res) => setPcReportSheet(res as PcReportSheet[]))
-            .catch((err) => console.error('Error fetching PC REPORT:', err));
-    }
 
-    // Add this new function after updatePcReportSheet()
-async function updateSheet(sheetName: string, rowIndex: number, updateData: any) {
-    try {
-        console.log('🔄 updateSheet called:', { sheetName, rowIndex, updateData });
-        
-        const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        
-        const formData = new FormData();
-        formData.append('action', 'update');
-        formData.append('sheetName', sheetName);
-        formData.append('rows', JSON.stringify([{ ...updateData, rowIndex }]));
-        
-        const response = await fetch(scriptUrl, {
-            method: 'POST',
-            body: formData,
-        });
-        
-        const result = await response.json();
-        console.log('📨 Update result:', result);
-        
-        if (result.success) {
-            // Refresh the PI Approval sheet after successful update
-            updatePIApprovalSheet();
-            toast.success('PI APPROVAL sheet updated successfully');
-        } else {
-            toast.error(result.error || 'Failed to update sheet');
+    // updateSheet — routes updates through postToSheet → Supabase
+    async function updateSheet(sheetName: string, rowIndex: number, updateData: any) {
+        try {
+
+            // Build the data payload with rowIndex for upsert
+            const payload = [{ ...updateData, rowIndex }];
+
+            const result = await postToSheet(payload, 'update', sheetName as any);
+
+            if (result && (result as any).success) {
+                // Refresh the relevant sheet after successful update
+                if (sheetName === 'PI APPROVAL') updatePIApprovalSheet();
+                else if (sheetName === 'INDENT') updateIndentSheet();
+                else if (sheetName === 'STORE IN') updateStoreInSheet();
+                else if (sheetName === 'TALLY ENTRY') updateTallyEntrySheet();
+                else if (sheetName === 'PO MASTER') updatePoMasterSheet();
+                else if (sheetName === 'Payment History') updatePaymentHistorySheet();
+
+                toast.success(`${sheetName} updated successfully`);
+            } else {
+                toast.error((result as any)?.error || 'Failed to update sheet');
+            }
+
+            return result;
+        } catch (error: any) {
+            console.error('❌ Error in updateSheet:', error);
+            toast.error('Error while updating sheet');
+            return { success: false, error: error.message };
         }
-        
-        return result;
-    } catch (error: any) {
-        console.error('❌ Error in updateSheet:', error);
-        toast.error('Network error while updating sheet');
-        return { success: false, error: error.message };
     }
-}
     function updateAll() {
         setAllLoading(true);
         updateMasterSheet();
@@ -256,7 +242,6 @@ async function updateSheet(sheetName: string, rowIndex: number, updateData: any)
         updateStoreInSheet();
         updateIssueSheet();
         updateTallyEntrySheet();
-        updatePcReportSheet();
         updateFullkittingSheet();
         updatePaymentHistorySheet();
         updatePIApprovalSheet();  // ✅ CORRECT
@@ -283,11 +268,10 @@ async function updateSheet(sheetName: string, rowIndex: number, updateData: any)
                 updateIssueSheet,
                 updateStoreInSheet,
                 updateTallyEntrySheet,
-                updatePcReportSheet,
                 updateFullkittingSheet,
                 updatePaymentHistorySheet,
                 updatePIApprovalSheet,  // ✅ CORRECT
-                 updateSheet, // ✅ ADD THIS LINE
+                updateSheet, // ✅ ADD THIS LINE
 
                 // Sheet data
                 sheets,
@@ -299,7 +283,6 @@ async function updateSheet(sheetName: string, rowIndex: number, updateData: any)
                 storeInSheet: storeSheet,
                 issueSheet,
                 tallyEntrySheet,
-                pcReportSheet,
                 fullkittingSheet,
                 paymentHistorySheet,
                 piApprovalSheet,  // ✅ CORRECT

@@ -89,12 +89,18 @@ export default function PcReportTable() {
     }
 
     try {
+      const currentDateTime = new Date().toISOString();
+      const updateDateStr = currentDateTime.split('T')[0];
+
       // Prepare data to post
       const mappedData = [
         {
-          rowIndex: selectedRow.rowIndex,      // Required for identifying the row in Sheet
-          actual5: new Date().toISOString(),   // Update actual5 to current timestamp
-          status5: values.status,              // Update status5 from form
+          rowIndex: selectedRow.rowIndex,
+          indentNumber: selectedRow.indentNumber,
+          liftNumber: selectedRow.liftNumber,
+          actual5: updateDateStr,
+          status5: values.status,
+          isCompleted: values.status === 'okey'
         }
       ];
 
@@ -232,11 +238,11 @@ export default function PcReportTable() {
       )
     },
     {
-      accessorKey: 'partyName',
-      header: 'Party Name',
+      accessorKey: 'vendorName',
+      header: 'Vendor Name',
       cell: ({ row }) => (
         <div className="text-center">
-          {row.original.partyName}
+          {row.original.vendorName}
         </div>
       )
     },
@@ -253,7 +259,7 @@ export default function PcReportTable() {
       accessorKey: 'billImage',
       header: 'Bill Image',
       cell: ({ row }) => {
-        const image = row.original.billImage;
+        const image = Array.isArray(row.original.billImage) ? row.original.billImage[0] : row.original.billImage;
         return (
           <div className="text-center">
             {image ? (
@@ -307,7 +313,7 @@ export default function PcReportTable() {
       accessorKey: 'productImage',
       header: 'Product Image',
       cell: ({ row }) => {
-        const image = row.original.productImage;
+        const image = Array.isArray(row.original.productImage) ? row.original.productImage[0] : row.original.productImage;
         return (
           <div className="text-center">
             {image ? (
@@ -327,24 +333,6 @@ export default function PcReportTable() {
       cell: ({ row }) => (
         <div className="text-center">
           {row.original.area}
-        </div>
-      )
-    },
-    {
-      accessorKey: 'indentedFor',
-      header: 'Indented For',
-      cell: ({ row }) => (
-        <div className="text-center">
-          {row.original.indentedFor}
-        </div>
-      )
-    },
-    {
-      accessorKey: 'approvedPartyName',
-      header: 'Approved Party Name',
-      cell: ({ row }) => (
-        <div className="text-center">
-          {row.original.approvedPartyName}
         </div>
       )
     },
@@ -432,7 +420,7 @@ export default function PcReportTable() {
                     <DataTable
                       data={data}
                       columns={columns}
-                      searchFields={['indentNo', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
+                      searchFields={['indentNo', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
                       dataLoading={false}
                       className="h-[70dvh]"
                     />
@@ -471,15 +459,13 @@ export default function PcReportTable() {
                       { label: 'Firm Name', value: selectedRow.firmNameMatch },
                       { label: 'Bill No', value: selectedRow.billNo },
                       { label: 'Quantity', value: selectedRow.qty },
-                      { label: 'Party Name', value: selectedRow.partyName },
+                      { label: 'Vendor Name', value: selectedRow.vendorName },
                       { label: 'Bill Amount', value: selectedRow.billAmt },
                       { label: 'Bill Received Later', value: selectedRow.billReceivedLater || 'N/A' },
                       { label: 'Not Received Bill No', value: selectedRow.notReceivedBillNo || 'N/A' },
                       { label: 'Location', value: selectedRow.location },
                       { label: 'Type Of Bills', value: selectedRow.typeOfBills },
                       { label: 'Area', value: selectedRow.area },
-                      { label: 'Indented For', value: selectedRow.indentedFor },
-                      { label: 'Approved Party Name', value: selectedRow.approvedPartyName },
                       { label: 'Rate', value: selectedRow.rate },
                       { label: 'Indent Qty', value: selectedRow.indentQty },
                       { label: 'Total Rate', value: selectedRow.totalRate },
@@ -500,7 +486,7 @@ export default function PcReportTable() {
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-gray-500">Bill Image</p>
                           <a
-                            href={selectedRow.billImage}
+                            href={Array.isArray(selectedRow.billImage) ? selectedRow.billImage[0] : selectedRow.billImage}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary hover:underline font-semibold"
@@ -513,7 +499,7 @@ export default function PcReportTable() {
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-gray-500">Product Image</p>
                           <a
-                            href={selectedRow.productImage}
+                            href={Array.isArray(selectedRow.productImage) ? selectedRow.productImage[0] : selectedRow.productImage}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary hover:underline font-semibold"

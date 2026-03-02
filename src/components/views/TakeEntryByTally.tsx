@@ -35,17 +35,17 @@ interface TallyEntryPendingData {
     productName: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
-    billImage: string;
-    billReceivedLater: string;
+    billImage: string[] | string;
+    billReceivedLater: boolean | string;
     notReceivedBillNo: string;
     location: string;
     typeOfBills: string;
-    productImage: string;
+    productImage: string[] | string;
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -66,17 +66,17 @@ interface TallyEntryHistoryData {
     productName: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
-    billImage: string;
-    billReceivedLater: string;
+    billImage: string[] | string;
+    billReceivedLater: boolean | string;
     notReceivedBillNo: string;
     location: string;
     typeOfBills: string;
-    productImage: string;
+    productImage: string[] | string;
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -102,22 +102,24 @@ export default () => {
     const [activeTab, setActiveTab] = useState('pending');
 
     useEffect(() => {
-        const filteredByFirm = tallyEntrySheet.filter(item => 
-            user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
-        );
-        
+        const filteredByFirm = tallyEntrySheet.filter((item) => {
+            const firmName = (item.firmNameMatch || '').toString().trim().toLowerCase();
+            const userFirm = (user.firmNameMatch || '').toString().trim().toLowerCase();
+            return userFirm === "all" || firmName === userFirm;
+        });
+
         setPendingData(
             filteredByFirm
-                .filter((i) => i.planned4 !== '' && i.actual4 === '')
+                .filter((i) => i.planned4 && i.planned4 !== '' && !i.actual4)
                 .map((i) => ({
-                     indentNo: i.indentNumber || '',   // ✅ FIX
+                    indentNo: i.indentNumber || '',
                     indentDate: i.indentDate || '',
                     purchaseDate: i.purchaseDate || '',
                     materialInDate: i.materialInDate || '',
                     productName: i.productName || '',
                     billNo: i.billNo || '',
                     qty: i.qty || 0,
-                    partyName: i.partyName || '',
+                    vendorName: i.vendorName || '',
                     billAmt: i.billAmt || 0,
                     billImage: i.billImage || '',
                     billReceivedLater: i.billReceivedLater || '',
@@ -127,7 +129,7 @@ export default () => {
                     productImage: i.productImage || '',
                     area: i.area || '',
                     indentedFor: i.indentedFor || '',
-                    approvedPartyName: i.approvedPartyName || '',
+                    approvedVendorName: i.approvedVendorName || '',
                     rate: i.rate || 0,
                     indentQty: i.indentQty || 0,
                     totalRate: i.totalRate || 0,
@@ -143,22 +145,24 @@ export default () => {
     }, [tallyEntrySheet, user.firmNameMatch]);
 
     useEffect(() => {
-        const filteredByFirm = tallyEntrySheet.filter(item => 
-            user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
-        );
-        
+        const filteredByFirm = tallyEntrySheet.filter((item) => {
+            const firmName = (item.firmNameMatch || '').toString().trim().toLowerCase();
+            const userFirm = (user.firmNameMatch || '').toString().trim().toLowerCase();
+            return userFirm === "all" || firmName === userFirm;
+        });
+
         setHistoryData(
             filteredByFirm
-                .filter((i) => i.planned4 !== '' && i.actual4 !== '')
+                .filter((i) => i.planned4 && i.planned4 !== '' && i.actual4)
                 .map((i) => ({
-                 indentNo: i.indentNumber || '',   // ✅ FIX
+                    indentNo: i.indentNumber || '',   // ✅ FIX
                     indentDate: i.indentDate || '',
                     purchaseDate: i.purchaseDate || '',
                     materialInDate: i.materialInDate || '',
                     productName: i.productName || '',
                     billNo: i.billNo || '',
                     qty: i.qty || 0,
-                    partyName: i.partyName || '',
+                    vendorName: i.vendorName || '',
                     billAmt: i.billAmt || 0,
                     billImage: i.billImage || '',
                     billReceivedLater: i.billReceivedLater || '',
@@ -168,7 +172,7 @@ export default () => {
                     productImage: i.productImage || '',
                     area: i.area || '',
                     indentedFor: i.indentedFor || '',
-                    approvedPartyName: i.approvedPartyName || '',
+                    approvedVendorName: i.approvedVendorName || '',
                     rate: i.rate || 0,
                     indentQty: i.indentQty || 0,
                     totalRate: i.totalRate || 0,
@@ -202,30 +206,30 @@ export default () => {
     const pendingColumns: ColumnDef<TallyEntryPendingData>[] = [
         ...(user.receiveItemView
             ? [
-                  {
-                      header: 'Action',
-                      cell: ({ row }: { row: Row<TallyEntryPendingData> }) => {
-                          return (
-                              <div className="flex justify-center">
-                                  <DialogTrigger asChild>
-                                      <Button
-                                          variant="outline"
-                                          onClick={() => {
-                                              setSelectedItem(row.original);
-                                          }}
-                                          className="min-w-[100px]"
-                                      >
-                                          Process
-                                      </Button>
-                                  </DialogTrigger>
-                              </div>
-                          );
-                      },
-                  },
-              ]
+                {
+                    header: 'Action',
+                    cell: ({ row }: { row: Row<TallyEntryPendingData> }) => {
+                        return (
+                            <div className="flex justify-center">
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setSelectedItem(row.original);
+                                        }}
+                                        className="min-w-[100px]"
+                                    >
+                                        Process
+                                    </Button>
+                                </DialogTrigger>
+                            </div>
+                        );
+                    },
+                },
+            ]
             : []),
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -251,8 +255,8 @@ export default () => {
         //         </div>
         //     )
         // },
-        { 
-            accessorKey: 'materialInDate', 
+        {
+            accessorKey: 'materialInDate',
             header: 'Material In Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -260,8 +264,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -269,8 +273,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -278,8 +282,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -287,8 +291,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -296,17 +300,17 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'partyName', 
-            header: 'Party Name',
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
             cell: ({ row }) => (
                 <div className="text-center">
-                    {row.original.partyName}
+                    {row.original.vendorName}
                 </div>
             )
         },
-        { 
-            accessorKey: 'billAmt', 
+        {
+            accessorKey: 'billAmt',
             header: 'Bill Amt',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -319,12 +323,17 @@ export default () => {
             header: 'Bill Image',
             cell: ({ row }) => {
                 const image = row.original.billImage;
+                const images = Array.isArray(image) ? image : (image ? [image] : []);
                 return (
                     <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                        {images.length > 0 ? (
+                            <div className="flex flex-col gap-1 items-center">
+                                {images.map((img, i) => (
+                                    <a key={i} href={img as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                        View{images.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                ))}
+                            </div>
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -332,8 +341,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'billReceivedLater', 
+        {
+            accessorKey: 'billReceivedLater',
             header: 'Bill Received Later',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -341,8 +350,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'notReceivedBillNo', 
+        {
+            accessorKey: 'notReceivedBillNo',
             header: 'Not Received Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -350,8 +359,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'location', 
+        {
+            accessorKey: 'location',
             header: 'Location',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -359,8 +368,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'typeOfBills', 
+        {
+            accessorKey: 'typeOfBills',
             header: 'Type Of Bills',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -373,12 +382,17 @@ export default () => {
             header: 'Product Image',
             cell: ({ row }) => {
                 const image = row.original.productImage;
+                const images = Array.isArray(image) ? image : (image ? [image] : []);
                 return (
                     <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                        {images.length > 0 ? (
+                            <div className="flex flex-col gap-1 items-center">
+                                {images.map((img, i) => (
+                                    <a key={i} href={img as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                        View{images.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                ))}
+                            </div>
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -386,8 +400,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'area', 
+        {
+            accessorKey: 'area',
             header: 'Area',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -395,26 +409,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentedFor', 
-            header: 'Indented For',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.indentedFor}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'approvedPartyName', 
-            header: 'Approved Party Name',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.approvedPartyName}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'rate', 
+        {
+            accessorKey: 'rate',
             header: 'Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -422,8 +418,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentQty', 
+        {
+            accessorKey: 'indentQty',
             header: 'Indent Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -431,8 +427,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'totalRate', 
+        {
+            accessorKey: 'totalRate',
             header: 'Total Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -440,8 +436,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status1', 
+        {
+            accessorKey: 'status1',
             header: 'Status 1',
             cell: ({ row }) => {
                 const status = row.original.status1;
@@ -455,8 +451,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks1', 
+        {
+            accessorKey: 'remarks1',
             header: 'Remarks 1',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -464,8 +460,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status2', 
+        {
+            accessorKey: 'status2',
             header: 'Status 2',
             cell: ({ row }) => {
                 const status = row.original.status2;
@@ -479,8 +475,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks2', 
+        {
+            accessorKey: 'remarks2',
             header: 'Remarks 2',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -488,8 +484,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status3', 
+        {
+            accessorKey: 'status3',
             header: 'Status 3',
             cell: ({ row }) => {
                 const status = row.original.status3;
@@ -503,8 +499,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks3', 
+        {
+            accessorKey: 'remarks3',
             header: 'Remarks 3',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -515,8 +511,8 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<TallyEntryHistoryData>[] = [
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -524,8 +520,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentDate', 
+        {
+            accessorKey: 'indentDate',
             header: 'Indent Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -533,8 +529,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'purchaseDate', 
+        {
+            accessorKey: 'purchaseDate',
             header: 'Purchase Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -542,8 +538,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'materialInDate', 
+        {
+            accessorKey: 'materialInDate',
             header: 'Material In Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -551,8 +547,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -560,8 +556,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -569,8 +565,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -578,17 +574,17 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'partyName', 
-            header: 'Party Name',
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
             cell: ({ row }) => (
                 <div className="text-center">
-                    {row.original.partyName}
+                    {row.original.vendorName}
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -596,8 +592,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'billAmt', 
+        {
+            accessorKey: 'billAmt',
             header: 'Bill Amt',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -610,12 +606,17 @@ export default () => {
             header: 'Bill Image',
             cell: ({ row }) => {
                 const image = row.original.billImage;
+                const images = Array.isArray(image) ? image : (image ? [image] : []);
                 return (
                     <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                        {images.length > 0 ? (
+                            <div className="flex flex-col gap-1 items-center">
+                                {images.map((img, i) => (
+                                    <a key={i} href={img as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                        View{images.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                ))}
+                            </div>
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -623,8 +624,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'billReceivedLater', 
+        {
+            accessorKey: 'billReceivedLater',
             header: 'Bill Received Later',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -632,8 +633,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'notReceivedBillNo', 
+        {
+            accessorKey: 'notReceivedBillNo',
             header: 'Not Received Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -641,8 +642,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'location', 
+        {
+            accessorKey: 'location',
             header: 'Location',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -650,8 +651,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'typeOfBills', 
+        {
+            accessorKey: 'typeOfBills',
             header: 'Type Of Bills',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -664,12 +665,17 @@ export default () => {
             header: 'Product Image',
             cell: ({ row }) => {
                 const image = row.original.productImage;
+                const images = Array.isArray(image) ? image : (image ? [image] : []);
                 return (
                     <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                        {images.length > 0 ? (
+                            <div className="flex flex-col gap-1 items-center">
+                                {images.map((img, i) => (
+                                    <a key={i} href={img as string} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs">
+                                        View{images.length > 1 ? ` ${i + 1}` : ''}
+                                    </a>
+                                ))}
+                            </div>
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -677,8 +683,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'area', 
+        {
+            accessorKey: 'area',
             header: 'Area',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -686,26 +692,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentedFor', 
-            header: 'Indented For',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.indentedFor}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'approvedPartyName', 
-            header: 'Approved Party Name',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.approvedPartyName}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'rate', 
+        {
+            accessorKey: 'rate',
             header: 'Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -713,8 +701,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentQty', 
+        {
+            accessorKey: 'indentQty',
             header: 'Indent Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -722,8 +710,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'totalRate', 
+        {
+            accessorKey: 'totalRate',
             header: 'Total Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -731,8 +719,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status1', 
+        {
+            accessorKey: 'status1',
             header: 'Status',
             cell: ({ row }) => {
                 const status = row.original.status1;
@@ -746,8 +734,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks1', 
+        {
+            accessorKey: 'remarks1',
             header: 'Remarks',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -755,8 +743,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status2', 
+        {
+            accessorKey: 'status2',
             header: 'Status 2',
             cell: ({ row }) => {
                 const status = row.original.status2;
@@ -770,8 +758,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks2', 
+        {
+            accessorKey: 'remarks2',
             header: 'Remarks 2',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -779,8 +767,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status3', 
+        {
+            accessorKey: 'status3',
             header: 'Status 3',
             cell: ({ row }) => {
                 const status = row.original.status3;
@@ -794,8 +782,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks3', 
+        {
+            accessorKey: 'remarks3',
             header: 'Remarks 3',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -803,8 +791,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status4', 
+        {
+            accessorKey: 'status4',
             header: 'Status 4',
             cell: ({ row }) => {
                 const status = row.original.status4;
@@ -818,8 +806,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks4', 
+        {
+            accessorKey: 'remarks4',
             header: 'Remarks 4',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -831,7 +819,7 @@ export default () => {
 
     const schema = z.object({
         status4: z
-            .enum(['Done', 'Not Done'], {
+            .enum(['Yes', 'No'], {
                 required_error: 'Please select a status',
             })
             .optional()
@@ -844,7 +832,7 @@ export default () => {
     const form = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
-            status4: undefined as 'Done' | 'Not Done' | undefined,
+            status4: undefined as 'Yes' | 'No' | undefined,
             remarks4: '',
         },
     });
@@ -860,26 +848,20 @@ export default () => {
 
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
-            const currentDateTime = new Date()
-                .toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-                .replace(',', '');
+            const currentDateTime = new Date().toISOString();
+            const updateDateStr = currentDateTime.split('T')[0];
 
             await postToSheet(
                 tallyEntrySheet
                     .filter((s) => s.indentNo === selectedItem?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
-                        actual4: currentDateTime,
+                        indentNumber: prev.indentNumber,
+                        liftNumber: prev.liftNumber,
+                        actual4: updateDateStr,
                         status4: values.status4,
                         remarks4: values.remarks4,
+                        isCompleted: values.status4 === 'Yes'
                     })),
                 'update',
                 'TALLY ENTRY'
@@ -919,7 +901,7 @@ export default () => {
                                         </p>
                                     </div>
                                 </div>
-                                
+
                                 {/* Stats Cards */}
                                 <div className="flex gap-4">
                                     <div className="bg-white p-4 rounded-xl shadow-sm border min-w-[140px]">
@@ -942,8 +924,8 @@ export default () => {
                                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                                     <div className="border-b px-6">
                                         <TabsList className="bg-transparent p-0 h-auto">
-                                            <TabsTrigger 
-                                                value="pending" 
+                                            <TabsTrigger
+                                                value="pending"
                                                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none px-6 py-3"
                                             >
                                                 <span className="flex items-center gap-2">
@@ -955,8 +937,8 @@ export default () => {
                                                     )}
                                                 </span>
                                             </TabsTrigger>
-                                            <TabsTrigger 
-                                                value="history" 
+                                            <TabsTrigger
+                                                value="history"
                                                 className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none px-6 py-3"
                                             >
                                                 <span className="flex items-center gap-2">
@@ -992,7 +974,7 @@ export default () => {
                                                 <DataTable
                                                     data={pendingData}
                                                     columns={pendingColumns}
-                                                    searchFields={['indentNo', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
+                                                    searchFields={['indentNo', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
                                                     dataLoading={false}
                                                 />
                                             </div>
@@ -1021,7 +1003,7 @@ export default () => {
                                                     searchFields={[
                                                         'indentNo',
                                                         'productName',
-                                                        'partyName',
+                                                        'vendorName',
                                                         'billNo',
                                                         'firmNameMatch',
                                                         'status1',
@@ -1068,15 +1050,13 @@ export default () => {
                                             { label: 'Bill No.', value: selectedItem.billNo },
                                             { label: 'Firm Name', value: selectedItem.firmNameMatch },
                                             { label: 'Quantity', value: selectedItem.qty },
-                                            { label: 'Party Name', value: selectedItem.partyName },
+                                            { label: 'Vendor Name', value: selectedItem.vendorName },
                                             { label: 'Bill Amount', value: selectedItem.billAmt },
                                             { label: 'Bill Received Later', value: selectedItem.billReceivedLater || 'N/A' },
                                             { label: 'Not Received Bill No.', value: selectedItem.notReceivedBillNo || 'N/A' },
                                             { label: 'Location', value: selectedItem.location },
                                             { label: 'Type Of Bills', value: selectedItem.typeOfBills },
                                             { label: 'Area', value: selectedItem.area },
-                                            { label: 'Indented For', value: selectedItem.indentedFor },
-                                            { label: 'Approved Party Name', value: selectedItem.approvedPartyName },
                                             { label: 'Rate', value: selectedItem.rate },
                                             { label: 'Indent Qty', value: selectedItem.indentQty },
                                             { label: 'Total Rate', value: selectedItem.totalRate },
@@ -1095,34 +1075,44 @@ export default () => {
                                             </div>
                                         ))}
                                     </div>
-                                    
+
                                     {/* Image Links */}
                                     <div className="mt-4 pt-4 border-t">
                                         <div className="flex gap-6">
-                                            {selectedItem.billImage && (
-                                                <div className="space-y-1">
+                                            {(selectedItem.billImage && Array.isArray(selectedItem.billImage) ? selectedItem.billImage.length > 0 : selectedItem.billImage) && (
+                                                <div className="space-y-1 content-center">
                                                     <p className="text-sm font-medium text-gray-500">Bill Image</p>
-                                                    <a 
-                                                        href={selectedItem.billImage} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline font-semibold"
-                                                    >
-                                                        View Bill Image
-                                                    </a>
+                                                    <div className="flex flex-col gap-1">
+                                                        {(Array.isArray(selectedItem.billImage) ? selectedItem.billImage : [selectedItem.billImage]).map((img, i, arr) => (
+                                                            <a
+                                                                key={i}
+                                                                href={img as string}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-primary hover:underline font-semibold text-sm"
+                                                            >
+                                                                View Bill Image{arr.length > 1 ? ` ${i + 1}` : ''}
+                                                            </a>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
-                                            {selectedItem.productImage && (
-                                                <div className="space-y-1">
+                                            {(selectedItem.productImage && Array.isArray(selectedItem.productImage) ? selectedItem.productImage.length > 0 : selectedItem.productImage) && (
+                                                <div className="space-y-1 content-center">
                                                     <p className="text-sm font-medium text-gray-500">Product Image</p>
-                                                    <a 
-                                                        href={selectedItem.productImage} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline font-semibold"
-                                                    >
-                                                        View Product Image
-                                                    </a>
+                                                    <div className="flex flex-col gap-1">
+                                                        {(Array.isArray(selectedItem.productImage) ? selectedItem.productImage : [selectedItem.productImage]).map((img, i, arr) => (
+                                                            <a
+                                                                key={i}
+                                                                href={img as string}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-primary hover:underline font-semibold text-sm"
+                                                            >
+                                                                View Product Image{arr.length > 1 ? ` ${i + 1}` : ''}
+                                                            </a>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -1146,16 +1136,16 @@ export default () => {
                                                         </SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent>
-                                                        <SelectItem value="Done" className="py-3">
+                                                        <SelectItem value="Yes" className="py-3">
                                                             <div className="flex items-center gap-2">
                                                                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                                <span>Done</span>
+                                                                <span>Yes</span>
                                                             </div>
                                                         </SelectItem>
-                                                        <SelectItem value="Not Done" className="py-3">
+                                                        <SelectItem value="No" className="py-3">
                                                             <div className="flex items-center gap-2">
                                                                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                                                <span>Not Done</span>
+                                                                <span>No</span>
                                                             </div>
                                                         </SelectItem>
                                                     </SelectContent>
@@ -1190,8 +1180,8 @@ export default () => {
                                         </Button>
                                     </DialogClose>
 
-                                    <Button 
-                                        type="submit" 
+                                    <Button
+                                        type="submit"
                                         disabled={form.formState.isSubmitting}
                                         className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
                                     >

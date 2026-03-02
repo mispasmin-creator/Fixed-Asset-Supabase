@@ -60,6 +60,14 @@ const formatDate = (dateString: string): string => {
         const day = String(dateObj.getDate()).padStart(2, '0');
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
         const year = String(dateObj.getFullYear()).slice(-2);
+
+        // Include time if the dateString seems to be a full timestamp (like ISO string)
+        if (dateString.includes('T') || dateString.includes(':')) {
+            const hours = String(dateObj.getHours()).padStart(2, '0');
+            const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+
         return `${day}/${month}/${year}`;
     } catch {
         return dateString;
@@ -85,9 +93,9 @@ const STAGES: Record<string, StageConfig> = {
     AUDIT: {
         name: 'Audit Data',
         plannedField: 'planned1',
-        actualField: 'Actual 1',
-        statusField: 'Status 1',
-        remarksField: 'Remarks1',
+        actualField: 'actual1',
+        statusField: 'status1',
+        remarksField: 'remarks1',
         color: 'bg-amber-100 text-amber-800 border-amber-200',
         icon: FileCheck,
         description: 'Initial audit verification',
@@ -97,9 +105,9 @@ const STAGES: Record<string, StageConfig> = {
     RECTIFY: {
         name: 'Rectify Mistake',
         plannedField: 'planned2',
-        actualField: 'Actual 2',
-        statusField: 'Status 2',
-        remarksField: 'Remarks 2',
+        actualField: 'actual2',
+        statusField: 'status2',
+        remarksField: 'remarks2',
         color: 'bg-blue-100 text-blue-800 border-blue-200',
         icon: AlertTriangle,
         description: 'Correct mistakes and add bilty',
@@ -109,9 +117,9 @@ const STAGES: Record<string, StageConfig> = {
     REAUDIT: {
         name: 'Reaudit Data',
         plannedField: 'planned3',
-        actualField: 'Actual 3',
-        statusField: 'Status 3',
-        remarksField: 'Remarks 3',
+        actualField: 'actual3',
+        statusField: 'status3',
+        remarksField: 'remarks3',
         color: 'bg-purple-100 text-purple-800 border-purple-200',
         icon: RotateCcw,
         description: 'Re-audit after corrections',
@@ -121,21 +129,21 @@ const STAGES: Record<string, StageConfig> = {
     TALLY_ENTRY: {
         name: 'Tally Entry',
         plannedField: 'planned4',
-        actualField: 'Actual 4',
-        statusField: 'Status 4',
-        remarksField: 'Remarks 4',
+        actualField: 'actual4',
+        statusField: 'status4',
+        remarksField: 'remarks4',
         color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
         icon: Calculator,
         description: 'Enter data into tally system',
         formTitle: 'Tally Entry',
-        statusOptions: ['Done', 'Not Done']
+        statusOptions: ['Yes', 'No']
     },
     AGAIN_AUDIT: {
         name: 'Again Auditing',
         plannedField: 'planned5',
-        actualField: 'Actual 5',
-        statusField: 'Status 5',
-        remarksField: 'Remarks 5',
+        actualField: 'actual5',
+        statusField: 'status5',
+        remarksField: 'remarks5',
         color: 'bg-orange-100 text-orange-800 border-orange-200',
         icon: ShieldCheck,
         description: 'Final audit verification',
@@ -162,7 +170,7 @@ interface ProcessedTallyData {
     firmNameMatch: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
     billImage: string;
     billReceivedLater: string;
@@ -172,7 +180,7 @@ interface ProcessedTallyData {
     productImage: string;
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -194,6 +202,11 @@ interface ProcessedTallyData {
     status3: string;
     status4: string;
     status5: string;
+    timestamp: string;
+    approvedVendorId?: number;
+    indenterName: string;
+    department: string;
+    uom: string;
 }
 
 // Define form values type
@@ -203,7 +216,7 @@ interface FormValues {
 }
 
 export default function PcReportTable() {
-    const { tallyEntrySheet, poMasterLoading, updateAll } = useSheets();
+    const { tallyEntrySheet, tallyEntryLoading, updateAll, masterSheet } = useSheets();
     const [allData, setAllData] = useState<ProcessedTallyData[]>([]);
     const [selectedRow, setSelectedRow] = useState<ProcessedTallyData | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
@@ -214,15 +227,15 @@ export default function PcReportTable() {
     useEffect(() => {
         if (!tallyEntrySheet) return;
 
-        console.log("🔍 Processing tally entry sheet data...");
 
         // Filter by firm name first
         const filteredByFirm = tallyEntrySheet.filter((item: SheetItem) => {
-            const firmName = getFieldValue(item, 'Firm Name', 'firmName', 'firmNameMatch');
-            return user.firmNameMatch.toLowerCase() === "all" || firmName === user.firmNameMatch;
+            const firmName = (getFieldValue(item, 'Firm Name', 'firmName', 'firmNameMatch') || '').toString().trim().toLowerCase();
+            const userFirm = (user.firmNameMatch || '').toString().trim().toLowerCase();
+
+            return userFirm === "all" || firmName === userFirm;
         });
 
-        console.log('✅ Filtered by firm:', filteredByFirm.length);
 
         // Process each item
         const processedData = filteredByFirm.map((item: SheetItem) => {
@@ -246,9 +259,12 @@ export default function PcReportTable() {
             // Determine current stage
             let currentStage: keyof typeof STAGES = 'AUDIT';
             let plannedDate = '';
-            let isCompleted = false;
+            let isCompleted = item.isCompleted || false;
 
-            if (hasValue(planned1) && !hasValue(actual1)) {
+            if (isCompleted) {
+                currentStage = 'COMPLETED';
+                plannedDate = actual5 || actual4 || actual3 || actual2 || actual1 || '';
+            } else if (hasValue(planned1) && !hasValue(actual1)) {
                 currentStage = 'AUDIT';
                 plannedDate = planned1;
             } else if (hasValue(planned2) && !hasValue(actual2)) {
@@ -263,10 +279,11 @@ export default function PcReportTable() {
             } else if (hasValue(planned5) && !hasValue(actual5)) {
                 currentStage = 'AGAIN_AUDIT';
                 plannedDate = planned5;
-            } else if (hasValue(actual1) && hasValue(actual2) && hasValue(actual3) && hasValue(actual4) && hasValue(actual5)) {
+            } else if (hasValue(actual5)) {
+                // Fallback for older data
                 currentStage = 'COMPLETED';
                 isCompleted = true;
-                plannedDate = planned5 || planned4 || planned3 || planned2 || planned1;
+                plannedDate = actual5;
             } else {
                 return null;
             }
@@ -282,7 +299,7 @@ export default function PcReportTable() {
                 firmNameMatch: getFieldValue(item, 'Firm Name', 'firmName', 'firmNameMatch').toString().trim(),
                 billNo: getFieldValue(item, 'Bill No.', 'Bill No', 'billNo').toString(),
                 qty: Number(getFieldValue(item, 'Qty', 'qty')) || 0,
-                partyName: getFieldValue(item, 'Party Name', 'partyName'),
+                vendorName: getFieldValue(item, 'Vendor Name', 'vendorName', 'vendorNameMatch', 'partyName'),
                 billAmt: Number(getFieldValue(item, 'Bill Amt', 'billAmt')) || 0,
                 billImage: getFieldValue(item, 'Bill Image', 'billImage'),
                 billReceivedLater: getFieldValue(item, 'Bill Recieved later', 'billReceivedLater'),
@@ -292,7 +309,7 @@ export default function PcReportTable() {
                 productImage: getFieldValue(item, 'Prodcut Image', 'Product Image', 'productImage'),
                 area: getFieldValue(item, 'Area', 'area'),
                 indentedFor: getFieldValue(item, 'Indented For', 'indentedFor'),
-                approvedPartyName: getFieldValue(item, 'Approved Party Name', 'approvedPartyName'),
+                approvedVendorName: getFieldValue(item, 'Approved Vendor Name', 'approvedVendorName', 'approvedPartyName'),
                 rate: Number(getFieldValue(item, 'Rate', 'rate')) || 0,
                 indentQty: Number(getFieldValue(item, 'Indent Qty', 'indentQty')) || 0,
                 totalRate: Number(getFieldValue(item, 'Total Rate', 'totalRate')) || 0,
@@ -314,19 +331,16 @@ export default function PcReportTable() {
                 status3: getFieldValue(item, 'Status 3', 'status3'),
                 status4: getFieldValue(item, 'Status 4', 'status4'),
                 status5: getFieldValue(item, 'Status 5', 'status5'),
+                timestamp: item.timestamp || '',
+                approvedVendorId: item.approvedVendorId,
+                indenterName: item.indenterName || '',
+                department: item.department || '',
+                uom: item.uom || '',
             };
 
             return mapped;
         }).filter((item): item is ProcessedTallyData => item !== null);
 
-        console.log(`✅ Processed ${processedData.length} items`);
-        console.log('📊 Stage distribution:',
-            processedData.reduce((acc, item) => {
-                const stage = item.currentStage;
-                acc[stage] = (acc[stage] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>)
-        );
 
         setAllData(processedData);
     }, [tallyEntrySheet, user.firmNameMatch]);
@@ -408,24 +422,10 @@ export default function PcReportTable() {
         }
 
         try {
-            console.log('🔄 Starting form submission...');
-            console.log('📝 Selected row:', selectedRow);
-            console.log('📋 Form values:', values);
 
-            // Get current date and time in dd/mm/yyyy hh:mm:ss format
-            const currentDateTime = new Date()
-                .toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-                .replace(',', '');
+            // Get current date and time in ISO format
+            const currentDateTime = new Date().toISOString();
 
-            console.log('📅 Current date/time:', currentDateTime);
 
             // Find the exact row in the original sheet data
             const sheetRow = tallyEntrySheet?.find((s: SheetItem) => {
@@ -439,33 +439,40 @@ export default function PcReportTable() {
                 return;
             }
 
-            console.log('✅ Found sheet row:', sheetRow);
-            console.log('📊 Row index:', sheetRow.rowIndex);
 
             // Get stage configuration
             const stageConfig = STAGES[selectedRow.currentStage];
 
             // Prepare update data with camelCase field names
-            const updateData = [{
+            const updateDateStr = currentDateTime.split('T')[0];
+            const updateData: any = {
                 rowIndex: sheetRow.rowIndex,
-                [stageConfig.actualField || '']: currentDateTime,
+                indentNumber: getFieldValue(sheetRow, 'Indent Number', 'indentNumber', 'indentNo'),
+                liftNumber: getFieldValue(sheetRow, 'Lift Number', 'liftNumber'),
+                [stageConfig.actualField || '']: updateDateStr,
                 [stageConfig.statusField || '']: values.status,
                 [stageConfig.remarksField || '']: values.remarks
-            }];
+            };
 
-            console.log('📤 Update data to send:', updateData);
+            // If Tally Entry is marked as Yes, mark as completed
+            if (selectedRow.currentStage === 'TALLY_ENTRY' && values.status === 'Yes') {
+                updateData.isCompleted = true;
+            }
 
-            // Post to Google Sheet
-            await postToSheet(updateData, 'update', 'TALLY ENTRY');
+            // If Again Audit is marked as 'okey', mark as completed
+            if (selectedRow.currentStage === 'AGAIN_AUDIT' && values.status === 'okey') {
+                updateData.isCompleted = true;
+            }
 
-            console.log('✅ Update successful');
+            // Post to Supabase
+            await postToSheet([updateData], 'update', 'TALLY ENTRY');
+
             toast.success(`Status updated for Indent ${selectedRow.indentNumber}`);
 
             // Close dialog and refresh data
             setOpenDialog(false);
             setTimeout(() => {
                 updateAll();
-                console.log('🔄 Data refreshed after update');
             }, 1500);
 
         } catch (err) {
@@ -507,6 +514,9 @@ export default function PcReportTable() {
             accessorKey: 'indentNumber',
             header: 'Indent No.'
         },
+        { accessorKey: 'indenterName', header: 'Indenter' },
+        { accessorKey: 'department', header: 'Department' },
+        { accessorKey: 'uom', header: 'UOM' },
         {
             accessorKey: 'currentStage',
             header: 'Current Stage',
@@ -522,6 +532,13 @@ export default function PcReportTable() {
             },
         },
         {
+            accessorKey: 'timestamp',
+            header: 'Timestamp',
+            cell: ({ row }) => (
+                <span className="text-gray-500 text-xs">{formatDate(row.original.timestamp)}</span>
+            )
+        },
+        {
             accessorKey: 'liftNumber',
             header: 'Lift Number',
             cell: ({ row }) => row.original.liftNumber || ''
@@ -530,6 +547,11 @@ export default function PcReportTable() {
             accessorKey: 'poNumber',
             header: 'Po Number',
             cell: ({ row }) => row.original.poNumber || ''
+        },
+        {
+            accessorKey: 'purchaseDate',
+            header: 'Purchase Date',
+            cell: ({ row }) => formatDate(row.original.purchaseDate)
         },
         {
             accessorKey: 'materialInDate',
@@ -544,7 +566,21 @@ export default function PcReportTable() {
         { accessorKey: 'productName', header: 'Product Name' },
         { accessorKey: 'billNo', header: 'Bill No.' },
         { accessorKey: 'qty', header: 'Qty' },
-        { accessorKey: 'partyName', header: 'Party Name' },
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
+            cell: ({ row }) => {
+                const vendorName = row.original.vendorName;
+                const approvedVendorId = row.original.approvedVendorId;
+
+                if (!vendorName && approvedVendorId && masterSheet?.vendors) {
+                    const vendor = masterSheet.vendors.find(v => v.id === approvedVendorId);
+                    return vendor ? <span className="font-medium text-blue-800">{vendor.vendorName}</span> : '-';
+                }
+
+                return <span>{vendorName || '-'}</span>;
+            }
+        },
         { accessorKey: 'billAmt', header: 'Bill Amt' },
         {
             accessorKey: 'billImage',
@@ -574,12 +610,6 @@ export default function PcReportTable() {
                 ) : null;
             },
         },
-        { accessorKey: 'area', header: 'Area' },
-        { accessorKey: 'indentedFor', header: 'Indented For' },
-        { accessorKey: 'approvedPartyName', header: 'Approved Party Name' },
-        { accessorKey: 'rate', header: 'Rate' },
-        { accessorKey: 'indentQty', header: 'Indent Qty' },
-        { accessorKey: 'totalRate', header: 'Total Rate' },
 
         // Add status and remarks columns for each stage
         {
@@ -712,23 +742,67 @@ export default function PcReportTable() {
     // Update completedColumns to show all status and remarks
     const completedColumns: ColumnDef<ProcessedTallyData>[] = [
         {
+            accessorKey: 'timestamp',
+            header: 'Timestamp',
+            cell: ({ row }) => (
+                <span className="text-gray-500 text-xs">{formatDate(row.original.timestamp)}</span>
+            )
+        },
+        {
             accessorKey: 'indentNumber',
             header: 'Indent No.'
         },
+        { accessorKey: 'indenterName', header: 'Indenter' },
+        { accessorKey: 'department', header: 'Department' },
+        { accessorKey: 'uom', header: 'UOM' },
         {
-            accessorKey: 'firmNameMatch',
-            header: 'Firm Name'
+            accessorKey: 'liftNumber',
+            header: 'Lift Number',
+            cell: ({ row }) => row.original.liftNumber || ''
+        },
+        {
+            accessorKey: 'materialInDate',
+            header: 'Material In Date',
+            cell: ({ row }) => formatDate(row.original.materialInDate)
         },
         {
             accessorKey: 'plannedDate',
             header: 'Completed Date',
             cell: ({ row }) => formatDate(row.original.plannedDate)
         },
+        {
+            accessorKey: 'purchaseDate',
+            header: 'Purchase Date',
+            cell: ({ row }) => formatDate(row.original.purchaseDate)
+        },
+        {
+            accessorKey: 'firmNameMatch',
+            header: 'Firm Name'
+        },
         { accessorKey: 'productName', header: 'Product Name' },
-        { accessorKey: 'billNo', header: 'Bill No' },
+        { accessorKey: 'billNo', header: 'Bill No.' },
         { accessorKey: 'qty', header: 'Quantity' },
-        { accessorKey: 'partyName', header: 'Party Name' },
-        { accessorKey: 'billAmt', header: 'Bill Amount' },
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
+            cell: ({ row }) => {
+                const vendorName = row.original.vendorName;
+                const approvedVendorId = row.original.approvedVendorId;
+
+                if (!vendorName && approvedVendorId && masterSheet?.vendors) {
+                    const vendor = masterSheet.vendors.find(v => v.id === approvedVendorId);
+                    return vendor ? <span className="font-medium text-blue-800">{vendor.vendorName}</span> : '-';
+                }
+
+                return <span>{vendorName || '-'}</span>;
+            }
+        },
+        { accessorKey: 'location', header: 'Location' },
+        { accessorKey: 'typeOfBills', header: 'Type Of Bills' },
+        {
+            accessorKey: 'billAmt',
+            header: 'Bill Amount'
+        },
         {
             accessorKey: 'status1',
             header: 'Audit Status',
@@ -914,8 +988,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -924,8 +998,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -934,8 +1008,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -944,8 +1018,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -954,8 +1028,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -964,8 +1038,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={pendingColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -974,8 +1048,8 @@ export default function PcReportTable() {
                         <DataTable
                             data={filteredData}
                             columns={completedColumns}
-                            searchFields={['indentNumber', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                            dataLoading={poMasterLoading}
+                            searchFields={['indentNumber', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                            dataLoading={tallyEntryLoading}
                             className='h-[70dvh]'
                         />
                     </TabsContent>
@@ -1016,8 +1090,8 @@ export default function PcReportTable() {
                                             <p className="text-sm font-light">{selectedRow.productName}</p>
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="font-medium">Party Name</p>
-                                            <p className="text-sm font-light">{selectedRow.partyName}</p>
+                                            <p className="font-medium">Vendor Name</p>
+                                            <p className="text-sm font-light">{selectedRow.vendorName}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="font-medium">Bill No.</p>
@@ -1025,7 +1099,15 @@ export default function PcReportTable() {
                                         </div>
                                         <div className="space-y-1">
                                             <p className="font-medium">Quantity</p>
-                                            <p className="text-sm font-light">{selectedRow.qty}</p>
+                                            <p className="text-sm font-light">{selectedRow.qty} {selectedRow.uom}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Indenter</p>
+                                            <p className="text-sm font-light">{selectedRow.indenterName}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Department</p>
+                                            <p className="text-sm font-light">{selectedRow.department}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="font-medium">Bill Amount</p>
@@ -1034,6 +1116,14 @@ export default function PcReportTable() {
                                         <div className="space-y-1">
                                             <p className="font-medium">Planned Date</p>
                                             <p className="text-sm font-light">{formatDate(selectedRow.plannedDate)}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Purchase Date</p>
+                                            <p className="text-sm font-light">{formatDate(selectedRow.purchaseDate)}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-medium">Material In Date</p>
+                                            <p className="text-sm font-light">{formatDate(selectedRow.materialInDate)}</p>
                                         </div>
                                     </div>
                                 </div>

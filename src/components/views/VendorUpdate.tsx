@@ -40,6 +40,7 @@ interface VendorUpdateData {
     planned2: string;
     actual2: string;
     specifications: string;
+    timestamp: string;
 }
 
 interface HistoryData {
@@ -57,6 +58,7 @@ interface HistoryData {
     actual2: string;
     specifications: string;
     firmNameMatch?: string;
+    timestamp: string;
 }
 
 export default () => {
@@ -72,7 +74,7 @@ export default () => {
     const [openDialog, setOpenDialog] = useState(false);
     const [editingRow, setEditingRow] = useState<string | null>(null);
     const [editValues, setEditValues] = useState<Partial<HistoryData>>({});
-    
+
     // Filter states
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedUOM, setSelectedUOM] = useState<string>('');
@@ -89,7 +91,12 @@ export default () => {
         );
 
         const data = filteredByFirm
-            .filter((sheet) => sheet.planned2 && sheet.planned2 !== null && !sheet.actual2)
+            .filter((sheet) =>
+                sheet.planned2 &&
+                sheet.planned2 !== null &&
+                !sheet.actual2 &&
+                sheet.vendorType?.toLowerCase() !== 'reject'
+            )
             .map((sheet) => ({
                 indentNo: sheet.indentNumber,
                 firmNameMatch: sheet.firmNameMatch,
@@ -102,6 +109,7 @@ export default () => {
                 planned2: sheet.planned2,
                 actual2: sheet.actual2,
                 specifications: sheet.specifications,
+                timestamp: sheet.timestamp,
             }));
 
         setTableData(data);
@@ -116,7 +124,11 @@ export default () => {
         );
 
         const data = filteredByFirm
-            .filter((sheet) => sheet.planned2 && sheet.actual2)
+            .filter((sheet) =>
+                sheet.planned2 &&
+                sheet.actual2 &&
+                sheet.vendorType?.toLowerCase() !== 'reject'
+            )
             .map((sheet: any) => ({
                 indentNo: sheet.indentNumber,
                 firmNameMatch: sheet.firmNameMatch || '',
@@ -127,11 +139,12 @@ export default () => {
                 uom: sheet.uom,
                 rate: sheet.approvedRate || 0,
                 vendorType: sheet.vendorType as VendorUpdateData['vendorType'],
-                date: new Date(sheet.timestamp).toDateString(),
+                date: sheet.timestamp,
                 lastUpdated: sheet.lastUpdated,
                 planned2: sheet.planned2,
                 actual2: sheet.actual2,
                 specifications: sheet.specifications,
+                timestamp: sheet.timestamp,
             }));
 
         setHistoryData(data);
@@ -155,7 +168,7 @@ export default () => {
 
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(item => 
+            filtered = filtered.filter(item =>
                 item.indentNo.toLowerCase().includes(query) ||
                 item.firmNameMatch?.toLowerCase().includes(query) ||
                 item.indenter.toLowerCase().includes(query) ||
@@ -185,7 +198,7 @@ export default () => {
 
         if (historySearchQuery.trim()) {
             const query = historySearchQuery.toLowerCase();
-            filtered = filtered.filter(item => 
+            filtered = filtered.filter(item =>
                 item.indentNo.toLowerCase().includes(query) ||
                 item.firmNameMatch?.toLowerCase().includes(query) ||
                 item.indenter.toLowerCase().includes(query) ||
@@ -223,6 +236,7 @@ export default () => {
                     .filter((s) => s.indentNumber === indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         quantity: editValues.quantity,
                         uom: editValues.uom,
                         vendorType: editValues.vendorType,
@@ -284,6 +298,20 @@ export default () => {
                 },
             ]
             : []),
+        {
+            accessorKey: 'timestamp',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="text-center text-gray-600">
+                    {formatDateTime(getValue() as string)}
+                </div>
+            )
+        },
         {
             accessorKey: 'indentNo',
             header: 'Indent No.',
@@ -375,13 +403,17 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'planned2', 
-            header: 'Planned Date',
+        {
+            accessorKey: 'planned2',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <CalendarDays className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
             cell: ({ row }) => (
                 <div className="text-center">
-                    <CalendarDays className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {formatDateTime(row.original.planned2)}
+                    {formatDateTiny(row.original.planned2)}
                 </div>
             )
         },
@@ -394,34 +426,51 @@ export default () => {
                     header: 'Action',
                     cell: ({ row }: { row: Row<HistoryData> }) => {
                         const indent = row.original;
+                        const isEditing = editingRow === indent.indentNo;
                         return (
-                            <div className="flex justify-center">
-                                <DialogTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        disabled={indent.vendorType === 'Three Party'}
-                                        onClick={() => {
-                                            setSelectedHistory(indent);
-                                            setOpenDialog(true);
-                                        }}
-                                        className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white border-0 font-semibold rounded-lg shadow-md disabled:opacity-50"
-                                    >
-                                        Update
-                                    </Button>
-                                </DialogTrigger>
+                            <div className="flex justify-center gap-2">
+                                {!isEditing && (
+                                    <>
+                                        <DialogTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                disabled={indent.vendorType === 'Three Party'}
+                                                onClick={() => {
+                                                    setSelectedHistory(indent);
+                                                    setOpenDialog(true);
+                                                }}
+                                                className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white border-0 font-semibold rounded-lg shadow-md disabled:opacity-50"
+                                            >
+                                                Update
+                                            </Button>
+                                        </DialogTrigger>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => handleEditClick(indent)}
+                                            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 font-semibold rounded-lg shadow-md"
+                                        >
+                                            Edit
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         );
+
                     },
                 },
             ]
             : []),
         {
             accessorKey: 'date',
-            header: 'Date',
-            cell: ({ getValue }) => (
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Date</span>
+                </div>
+            ),
+            cell: ({ row }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string}
+                    {formatDateTime(row.original.date)}
                 </div>
             )
         },
@@ -618,7 +667,7 @@ export default () => {
                 <div className="text-center">
                     <CalendarDays className="inline mr-2 h-4 w-4 text-gray-600" />
                     {row.original.planned2
-                        ? formatDateTime(row.original.planned2)
+                        ? formatDateTiny(row.original.planned2)
                         : '-'}
                 </div>
             )
@@ -630,7 +679,7 @@ export default () => {
                 <div className="text-center">
                     <CalendarDays className="inline mr-2 h-4 w-4 text-green-600" />
                     {row.original.actual2
-                        ? formatDateTime(row.original.actual2)
+                        ? formatDateTiny(row.original.actual2)
                         : '-'}
                 </div>
             )
@@ -650,9 +699,9 @@ export default () => {
                                 >
                                     Save
                                 </Button>
-                                <Button 
-                                    size="sm" 
-                                    variant="outline" 
+                                <Button
+                                    size="sm"
+                                    variant="outline"
                                     onClick={handleCancelEdit}
                                     className="border-red-500 text-red-600 hover:bg-red-50 font-semibold"
                                 >
@@ -699,7 +748,7 @@ export default () => {
             let withTaxOrNot = '';
             let taxValue = 0;
             let finalRate = values.rate;
-            
+
             if (values.rateType === 'basic') {
                 if (values.withTax === 'yes') {
                     withTaxOrNot = 'Yes';
@@ -719,6 +768,7 @@ export default () => {
                     .filter((s) => s.indentNumber === selectedIndent?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         actual2: new Date().toISOString(),
                         vendorName1: values.vendorName,
                         selectRateType1: rateTypeText,
@@ -729,17 +779,18 @@ export default () => {
                         approvedVendorName: values.vendorName,
                         approvedRate: finalRate,
                         approvedPaymentTerm: values.paymentTerm,
+                        approvedVendorId: options?.vendors?.find(v => v.vendorName === values.vendorName)?.id,
+                        vendor1Id: options?.vendors?.find(v => v.vendorName === values.vendorName)?.id,
                         lastUpdated: new Date().toISOString(),
                     })),
                 'update'
             );
-            
+
             toast.success(`Updated vendor of ${selectedIndent?.indentNo}`);
             setOpenDialog(false);
             regularForm.reset();
             setTimeout(() => updateIndentSheet(), 1000);
         } catch (error) {
-            console.error('Error updating vendor:', error);
             toast.error('Failed to update vendor');
         }
     }
@@ -820,86 +871,83 @@ export default () => {
                 });
             }
 
-            const processVendorData = (vendor: typeof values.vendors[0]) => {
-                const rateTypeText = vendor.rateType === 'basic' ? 'Basic Rate' : 'With Tax';
-                let withTaxOrNot = '';
-                let taxValue = 0;
-                
+            const prepareVendorInsertionData = (vendor: typeof values.vendors[0]) => {
+                let with_tax = false;
+                let tax_value = 0;
+
                 if (vendor.rateType === 'basic') {
                     if (vendor.withTax === 'yes') {
-                        withTaxOrNot = 'Yes';
-                        taxValue = 0;
-                    } else if (vendor.withTax === 'no') {
-                        withTaxOrNot = 'No';
-                        taxValue = vendor.gstPercent || 0;
+                        with_tax = true;
+                        tax_value = 0;
+                    } else {
+                        with_tax = false;
+                        tax_value = vendor.gstPercent || 0;
                     }
                 } else {
-                    withTaxOrNot = 'Yes';
-                    taxValue = 0;
+                    with_tax = true;
+                    tax_value = 0;
                 }
 
                 return {
-                    rateType: rateTypeText,
+                    vendor_name: vendor.vendorName,
+                    rate_type: vendor.rateType === 'basic' ? 'Basic Rate' : 'With Tax',
                     rate: vendor.rate,
-                    withTaxOrNot,
-                    taxValue,
+                    with_tax,
+                    tax_value,
+                    payment_term: vendor.paymentTerm,
+                    whatsapp_number: vendor.whatsappNumber,
+                    email: vendor.emailId,
                 };
             };
 
-            const vendor1Data = processVendorData(values.vendors[0]);
-            const vendor2Data = processVendorData(values.vendors[1]);
-            const vendor3Data = processVendorData(values.vendors[2]);
+            const vendorsToInsert = values.vendors.map(prepareVendorInsertionData);
+            const vendorResult = await postToSheet(vendorsToInsert, 'insert', 'VENDORS');
+
+            let v1Id: number | undefined, v2Id: number | undefined, v3Id: number | undefined;
+            if (vendorResult && (vendorResult as any).success && (vendorResult as any).data) {
+                const inserted = (vendorResult as any).data;
+                v1Id = inserted[0]?.id;
+                v2Id = inserted[1]?.id;
+                v3Id = inserted[2]?.id;
+            }
+
 
             await postToSheet(
                 indentSheet
                     .filter((s) => s.indentNumber === selectedIndent?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         actual2: new Date().toISOString(),
-                        
-                        // Vendor 1
+
+                        // Vendor IDs
+                        vendor1Id: v1Id,
+                        vendor2Id: v2Id,
+                        vendor3Id: v3Id,
+
+                        // Legacy fields for backward compatibility (optional but safer)
                         vendorName1: values.vendors[0].vendorName,
-                        selectRateType1: vendor1Data.rateType,
-                        rate1: vendor1Data.rate.toString(),
-                        withTaxOrNot1: vendor1Data.withTaxOrNot,
-                        taxValue1: vendor1Data.taxValue.toString(),
+                        rate1: values.vendors[0].rate,
                         paymentTerm1: values.vendors[0].paymentTerm,
-                        whatsappNumber1: values.vendors[0].whatsappNumber,
-                        emailId1: values.vendors[0].emailId,
-                        
-                        // Vendor 2
                         vendorName2: values.vendors[1].vendorName,
-                        selectRateType2: vendor2Data.rateType,
-                        rate2: vendor2Data.rate.toString(),
-                        withTaxOrNot2: vendor2Data.withTaxOrNot,
-                        taxValue2: vendor2Data.taxValue.toString(),
+                        rate2: values.vendors[1].rate,
                         paymentTerm2: values.vendors[1].paymentTerm,
-                        whatsappNumber2: values.vendors[1].whatsappNumber,
-                        emailId2: values.vendors[1].emailId,
-                        
-                        // Vendor 3
                         vendorName3: values.vendors[2].vendorName,
-                        selectRateType3: vendor3Data.rateType,
-                        rate3: vendor3Data.rate.toString(),
-                        withTaxOrNot3: vendor3Data.withTaxOrNot,
-                        taxValue3: vendor3Data.taxValue.toString(),
+                        rate3: values.vendors[2].rate,
                         paymentTerm3: values.vendors[2].paymentTerm,
-                        whatsappNumber3: values.vendors[2].whatsappNumber,
-                        emailId3: values.vendors[2].emailId,
-                        
+
                         comparisonSheet: url,
                         productCode: values.productCode || '',
                         lastUpdated: new Date().toISOString(),
                     })),
                 'update'
             );
-            
+
             toast.success(`Updated vendors of ${selectedIndent?.indentNo}`);
             setOpenDialog(false);
             threePartyForm.reset();
             setTimeout(() => updateIndentSheet(), 1000);
         } catch (error) {
-            console.error('Error updating vendors:', error);
             toast.error('Failed to update vendors');
         }
     }
@@ -929,6 +977,7 @@ export default () => {
                     .filter((s) => s.indentNumber === selectedHistory?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         rate1: values.rate.toString(),
                         approvedRate: values.rate,
                         lastUpdated: new Date().toISOString(),
@@ -944,21 +993,33 @@ export default () => {
         }
     }
 
-    function onError(e: any) {
-        console.log(e);
+    function onError() {
         toast.error('Please fill all required fields');
     }
 
     const formatDateTime = (isoString?: string) => {
         if (!isoString) return '-';
         const date = new Date(isoString);
-        const day = date.getDate().toString().padStart(2, "0");
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const year = date.getFullYear();
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        const seconds = date.getSeconds().toString().padStart(2, "0");
-        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+        if (isNaN(date.getTime())) return isoString;
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear().toString().slice(-2);
+        const time = date.toLocaleString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        return `${d}/${m}/${y} ${time}`;
+    };
+
+    const formatDateTiny = (isoString?: string) => {
+        if (!isoString) return '-';
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return isoString;
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear().toString().slice(-2);
+        return `${d}/${m}/${y}`;
     };
 
     return (
@@ -973,7 +1034,7 @@ export default () => {
                         >
                             <UserCheck size={50} className="text-blue-600" />
                         </Heading>
-                        
+
                         <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-6 mb-6">
                             <TabsContent value="pending" className="mt-0">
                                 {/* Enhanced Filter Section */}
@@ -1238,10 +1299,10 @@ export default () => {
                                                         {watchRateType === 'basic' ? 'Basic Rate' : 'Rate (With Tax)'}
                                                     </FormLabel>
                                                     <FormControl>
-                                                        <Input 
-                                                            type="number" 
-                                                            className="h-12 border-2 border-gray-300 rounded-xl text-lg" 
-                                                            {...field} 
+                                                        <Input
+                                                            type="number"
+                                                            className="h-12 border-2 border-gray-300 rounded-xl text-lg"
+                                                            {...field}
                                                         />
                                                     </FormControl>
                                                 </FormItem>
@@ -1278,8 +1339,8 @@ export default () => {
                                                         render={({ field }) => (
                                                             <FormItem>
                                                                 <FormLabel className="font-semibold text-gray-700 text-lg">GST %</FormLabel>
-                                                                <Select 
-                                                                    onValueChange={(value) => field.onChange(Number(value))} 
+                                                                <Select
+                                                                    onValueChange={(value) => field.onChange(Number(value))}
                                                                     value={field.value?.toString()}
                                                                 >
                                                                     <FormControl>
@@ -1327,16 +1388,16 @@ export default () => {
 
                                     <DialogFooter className="flex justify-center gap-4 pt-6">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close
                                             </Button>
                                         </DialogClose>
 
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             disabled={regularForm.formState.isSubmitting}
                                             className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl px-8 py-3 text-lg font-semibold border-0"
                                         >
@@ -1397,11 +1458,11 @@ export default () => {
                                             <TabsTrigger value="1" className="rounded-md data-[state=active]:bg-blue-600 data-[state=active]:text-white">Vendor 2</TabsTrigger>
                                             <TabsTrigger value="2" className="rounded-md data-[state=active]:bg-blue-600 data-[state=active]:text-white">Vendor 3</TabsTrigger>
                                         </TabsList>
-                                        
+
                                         {fields.map((field, index) => {
                                             const watchVendorRateType = threePartyForm.watch(`vendors.${index}.rateType`);
                                             const watchVendorWithTax = threePartyForm.watch(`vendors.${index}.withTax`);
-                                            
+
                                             return (
                                                 <TabsContent value={`${index}`} key={field.id} className="space-y-4">
                                                     <div className="grid gap-4">
@@ -1455,9 +1516,9 @@ export default () => {
                                                                             {watchVendorRateType === 'basic' ? 'Basic Rate' : 'Rate (With Tax)'}
                                                                         </FormLabel>
                                                                         <FormControl>
-                                                                            <Input 
-                                                                                type="number" 
-                                                                                {...field} 
+                                                                            <Input
+                                                                                type="number"
+                                                                                {...field}
                                                                                 className="h-12 border-2 border-gray-300 rounded-xl"
                                                                             />
                                                                         </FormControl>
@@ -1497,8 +1558,8 @@ export default () => {
                                                                         render={({ field }) => (
                                                                             <FormItem>
                                                                                 <FormLabel className="font-semibold text-gray-700">GST %</FormLabel>
-                                                                                <Select 
-                                                                                    onValueChange={(value) => field.onChange(Number(value))} 
+                                                                                <Select
+                                                                                    onValueChange={(value) => field.onChange(Number(value))}
                                                                                     value={field.value?.toString()}
                                                                                 >
                                                                                     <FormControl>
@@ -1607,8 +1668,8 @@ export default () => {
 
                                     <DialogFooter className="flex justify-center gap-4 pt-6">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close
@@ -1655,7 +1716,7 @@ export default () => {
                                             </span>
                                         </DialogDescription>
                                     </DialogHeader>
-                                    
+
                                     <div className="grid gap-4">
                                         <FormField
                                             control={historyUpdateForm.control}
@@ -1664,9 +1725,9 @@ export default () => {
                                                 <FormItem>
                                                     <FormLabel className="font-semibold text-gray-700 text-lg">Rate</FormLabel>
                                                     <FormControl>
-                                                        <Input 
-                                                            type="number" 
-                                                            {...field} 
+                                                        <Input
+                                                            type="number"
+                                                            {...field}
                                                             className="h-12 border-2 border-gray-300 rounded-xl text-lg text-center"
                                                         />
                                                     </FormControl>
@@ -1677,8 +1738,8 @@ export default () => {
 
                                     <DialogFooter className="flex justify-center gap-4">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close

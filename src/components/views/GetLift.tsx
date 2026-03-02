@@ -28,18 +28,45 @@ import { useAuth } from '@/context/AuthContext';
 import Heading from '../element/Heading';
 import { formatDate } from '@/lib/utils';
 
+const formatDateTime = (isoString?: string) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear().toString().slice(-2);
+    const time = date.toLocaleString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+    return `${d}/${m}/${y} ${time}`;
+};
+
+const formatDateTiny = (isoString?: string) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear().toString().slice(-2);
+    return `${d}/${m}/${y}`;
+};
+
 interface GetPurchaseData {
     indentNo: string;
     firmNameMatch: string;
     vendorName: string;
     poNumber: string;
-    poDate: string;
-    deliveryDate: string;
+    poDate: string | number | Date;
+    deliveryDate: string | number | Date;
     product?: string;
     quantity?: number;
     pendingLiftQty?: number;
     receivedQty?: number;
     pendingPoQty?: number;
+    timestamp?: string;
+    planned5?: string | number | Date;
 }
 
 interface HistoryData {
@@ -47,8 +74,8 @@ interface HistoryData {
     firmNameMatch: string;
     vendorName: string;
     poNumber: string;
-    deliveryDate: string;
-    poDate: string;
+    deliveryDate: string | number | Date;
+    poDate: string | number | Date;
     product?: string;
     quantity?: number;
     pendingLiftQty?: number;
@@ -69,6 +96,7 @@ interface IndentSheetRecord {
     pendingLiftQty?: string | number;
     quantity?: string | number;
     approvedQuantity?: string | number;
+    timestamp?: string | number | Date;
 }
 
 interface StoreInRecord {
@@ -85,34 +113,22 @@ interface AuthUser {
 }
 
 export default function GetPurchase() {
-    const { indentSheet, indentLoading, updateStoreInSheet, storeInSheet } = useSheets();
+    const { indentSheet, indentLoading, updateStoreInSheet, storeInSheet, masterSheet, updateIndentSheet } = useSheets();
     const { user } = useAuth() as { user: AuthUser };
     const [selectedIndent, setSelectedIndent] = useState<GetPurchaseData | null>(null);
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
     const [tableData, setTableData] = useState<GetPurchaseData[]>([]);
     const [openDialog, setOpenDialog] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false); // true = editing existing store_in record
     const [vendorOptions, setVendorOptions] = useState<string[]>([]);
     const [vendorSearch, setVendorSearch] = useState('');
 
-    // Fetch vendor options from MASTER sheet
+    // Get vendor options from masterSheet (Supabase) instead of Google Sheets
     useEffect(() => {
-        const fetchVendorOptions = async () => {
-            try {
-                const response = await fetch(
-                    `${import.meta.env.VITE_APP_SCRIPT_URL}?sheetName=MASTER`
-                );
-                const data = await response.json();
-                if (data.success && data.options) {
-                    setVendorOptions(data.options.vendorName || []);
-                }
-            } catch (error) {
-                console.error('Failed to fetch vendor options:', error);
-                toast.error('Failed to load vendor options');
-            }
-        };
-        
-        fetchVendorOptions();
-    }, []);
+        if (masterSheet?.vendorNames && masterSheet.vendorNames.length > 0) {
+            setVendorOptions(masterSheet.vendorNames);
+        }
+    }, [masterSheet]);
 
     useEffect(() => {
         const filteredByFirm = indentSheet.filter((sheet: IndentSheetRecord) =>
@@ -122,30 +138,32 @@ export default function GetPurchase() {
         setTableData(
             filteredByFirm
                 .filter((sheet: IndentSheetRecord) => {
-                    return sheet.liftingStatus === 'Pending' && 
-                           sheet.planned5 && 
-                           sheet.planned5.toString().trim() !== '';
+                    return sheet.liftingStatus === 'Pending' &&
+                        sheet.planned5 &&
+                        sheet.planned5.toString().trim() !== '';
                 })
                 .map((sheet: IndentSheetRecord) => {
                     const receivedQty = storeInSheet
                         .filter((store: StoreInRecord) => store.indentNo === sheet.indentNumber?.toString())
                         .reduce((sum: number, store: StoreInRecord) => sum + (Number(store.receivedQuantity) || 0), 0);
-                    
+
                     const approvedQty = Number(sheet.approvedQuantity) || Number(sheet.quantity) || 0;
                     const pendingLift = Number(sheet.pendingLiftQty) || approvedQty;
-                    
+
                     return {
                         indentNo: sheet.indentNumber?.toString() || '',
                         firmNameMatch: sheet.firmNameMatch || '',
                         vendorName: sheet.approvedVendorName || '',
                         poNumber: sheet.poNumber || '',
-                        poDate: sheet.actual4 ? formatDate(new Date(sheet.actual4)) : '',
-                        deliveryDate: sheet.deliveryDate ? formatDate(new Date(sheet.deliveryDate)) : '',
+                        poDate: sheet.actual4 || '',
+                        deliveryDate: sheet.deliveryDate || '',
                         product: sheet.productName || '',
                         quantity: approvedQty,
                         pendingLiftQty: pendingLift,
                         receivedQty: receivedQty,
                         pendingPoQty: pendingLift - receivedQty,
+                        timestamp: sheet.timestamp ? new Date(sheet.timestamp).toISOString() : '',
+                        planned5: sheet.planned5 || '',
                     };
                 })
         );
@@ -156,24 +174,25 @@ export default function GetPurchase() {
             user?.firmNameMatch?.toLowerCase() === "all" || sheet.firmNameMatch === user?.firmNameMatch
         );
 
-        const completedIndents = filteredByFirm
+        const indentsWithLifts = filteredByFirm
             .filter((sheet: IndentSheetRecord) => {
-                return sheet.liftingStatus === 'Complete' && 
-                       sheet.planned5 && 
-                       sheet.planned5.toString().trim() !== '';
+                return sheet.planned5 &&
+                    sheet.planned5.toString().trim() !== '';
             });
 
         const indentDataMap = new Map(
-            completedIndents.map((sheet: any) => [
+            indentsWithLifts.map((sheet: any) => [
                 sheet.indentNumber?.toString() || '',
                 {
                     poNumber: sheet.poNumber || '',
-                    poDate: sheet.actual4 ? formatDate(new Date(sheet.actual4)) : '',
-                    deliveryDate: sheet.deliveryDate ? formatDate(new Date(sheet.deliveryDate)) : '',
+                    poDate: sheet.actual4 || '',
+                    deliveryDate: sheet.deliveryDate || '',
                     approvedVendorName: sheet.approvedVendorName || '',
                     productName: sheet.productName || '',
                     approvedQuantity: sheet.approvedQuantity || sheet.quantity || 0,
                     pendingLiftQty: sheet.pendingLiftQty || 0,
+                    timestamp: sheet.timestamp || '',
+                    planned5: sheet.planned5 || '',
                 }
             ])
         );
@@ -183,21 +202,21 @@ export default function GetPurchase() {
                 .filter((sheet: StoreInRecord) => indentDataMap.has(sheet.indentNo || ''))
                 .map((sheet: StoreInRecord) => {
                     const indentData = indentDataMap.get(sheet.indentNo || '')!;
-                    
-                    const indentRecord = completedIndents.find(
+
+                    const indentRecord = indentsWithLifts.find(
                         (indent) => indent.indentNumber?.toString() === sheet.indentNo
                     );
-                    
-                    const approvedQty = Number(indentRecord?.approvedQuantity) || 
-                                       Number(indentRecord?.quantity) || 0;
-                    
+
+                    const approvedQty = Number(indentRecord?.approvedQuantity) ||
+                        Number(indentRecord?.quantity) || 0;
+
                     const receivedQty = storeInSheet
                         .filter((store: StoreInRecord) => store.indentNo === sheet.indentNo)
-                        .reduce((sum: number, store: StoreInRecord) => 
+                        .reduce((sum: number, store: StoreInRecord) =>
                             sum + (Number(store.receivedQuantity) || 0), 0);
-                    
+
                     const pendingLift = approvedQty - receivedQty;
-                    
+
                     return {
                         indentNo: sheet.indentNo || '',
                         firmNameMatch: sheet.firmNameMatch || '',
@@ -210,6 +229,8 @@ export default function GetPurchase() {
                         pendingLiftQty: pendingLift,
                         receivedQty: receivedQty,
                         pendingPoQty: Math.max(0, pendingLift),
+                        timestamp: indentData.timestamp,
+                        planned5: indentData.planned5,
                     };
                 })
                 .sort((a, b) => b.indentNo.localeCompare(a.indentNo))
@@ -231,6 +252,8 @@ export default function GetPurchase() {
                                         variant="outline"
                                         onClick={() => {
                                             setSelectedIndent(indent);
+                                            setIsEditMode(false);
+                                            form.setValue('vendorName', indent.vendorName);
                                             setOpenDialog(true);
                                         }}
                                         className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 font-semibold rounded-lg shadow-md"
@@ -244,6 +267,34 @@ export default function GetPurchase() {
                 },
             ]
             : []),
+        {
+            accessorKey: 'timestamp',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="text-center text-gray-600">
+                    {formatDateTime(getValue() as string)}
+                </div>
+            )
+        },
+        {
+            accessorKey: 'planned5',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="text-center">
+                    {formatDateTiny(getValue() as string)}
+                </div>
+            )
+        },
         {
             accessorKey: 'indentNo',
             header: 'Indent No.',
@@ -284,21 +335,29 @@ export default function GetPurchase() {
         },
         {
             accessorKey: 'poDate',
-            header: 'PO Date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>PO Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string || '-'}
+                    {formatDateTiny(getValue() as string)}
                 </div>
             )
         },
         {
             accessorKey: 'deliveryDate',
-            header: 'Delivery Date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Delivery Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string || '-'}
+                    {formatDateTiny(getValue() as string)}
                 </div>
             )
         },
@@ -332,8 +391,59 @@ export default function GetPurchase() {
     ];
 
     const historyColumns: ColumnDef<HistoryData>[] = [
+        ...(user?.receiveItemAction
+            ? [
+                {
+                    header: 'Action',
+                    cell: ({ row }: { row: Row<HistoryData> }) => {
+                        const indent = row.original;
+                        return (
+                            <div className="flex justify-center">
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setSelectedIndent(indent as any);
+                                            setIsEditMode(true);
+                                            // Pre-fill form with existing store_in data
+                                            const existingRecord = storeInSheet.find(
+                                                (s: StoreInRecord) => s.indentNo === indent.indentNo
+                                            ) as any;
+                                            form.setValue('vendorName', indent.vendorName);
+                                            if (existingRecord) {
+                                                form.setValue('billStatus', existingRecord.billStatus || '');
+                                                form.setValue('billNo', existingRecord.billNo || '');
+                                                form.setValue('qty', Number(existingRecord.qty) || 0);
+                                                form.setValue('leadTime', existingRecord.leadTimeToLiftMaterial?.toString() || '');
+                                                form.setValue('typeOfBill', existingRecord.typeOfBill || '');
+                                                form.setValue('billAmount', Number(existingRecord.billAmount) || 0);
+                                                form.setValue('discountAmount', Number(existingRecord.discountAmount) || 0);
+                                                form.setValue('paymentType', existingRecord.paymentType || '');
+                                                form.setValue('advanceAmount', Number(existingRecord.advanceAmountIfAny) || 0);
+                                                form.setValue('billRemark', existingRecord.billRemark || '');
+                                                form.setValue('transportationInclude', existingRecord.transportationInclude || '');
+                                                form.setValue('transporterName', existingRecord.transporterName || '');
+                                                form.setValue('vehicleNo', existingRecord.vehicleNo || '');
+                                                form.setValue('driverName', existingRecord.driverName || '');
+                                                form.setValue('driverMobileNo', existingRecord.driverMobileNo || '');
+                                                form.setValue('amount', Number(existingRecord.amount) || 0);
+                                            }
+                                            setOpenDialog(true);
+                                        }}
+                                        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 font-semibold rounded-lg shadow-md"
+                                    >
+                                        Edit
+                                    </Button>
+                                </DialogTrigger>
+                            </div>
+                        );
+                    },
+                },
+            ]
+            : []),
         {
             accessorKey: 'indentNo',
+
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="text-center font-bold text-blue-700">
@@ -372,21 +482,29 @@ export default function GetPurchase() {
         },
         {
             accessorKey: 'poDate',
-            header: 'PO Date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>PO Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string || '-'}
+                    {formatDateTiny(getValue() as string)}
                 </div>
             )
         },
         {
             accessorKey: 'deliveryDate',
-            header: 'Delivery Date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Delivery Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string || '-'}
+                    {formatDateTiny(getValue() as string)}
                 </div>
             )
         },
@@ -477,44 +595,130 @@ export default function GetPurchase() {
                 });
             }
 
-            const newStoreInRecord = {
-                timestamp: new Date().toISOString(),
-                indentNo: selectedIndent?.indentNo || '',
-                poNumber: selectedIndent?.poNumber || '',
-                vendorName: values.vendorName || '',
-                productName: selectedIndent?.product || '',
-                billStatus: values.billStatus,
-                billNo: values.billNo || '',
-                qty: values.qty || selectedIndent?.quantity || 0,
-                leadTimeToLiftMaterial: Number(values.leadTime) || 0,
-                typeOfBill: values.typeOfBill || '',
-                billAmount: values.billAmount || 0,
-                discountAmount: values.discountAmount || 0,
-                paymentType: values.paymentType || '',
-                advanceAmountIfAny: values.advanceAmount || 0,
-                photoOfBill: photoUrl,
-                billRemark: values.billRemark || '',
-                transportationInclude: values.transportationInclude || '',
-                transporterName: values.transporterName || '',
-                vehicleNo: values.vehicleNo || '',
-                driverName: values.driverName || '',
-                driverMobileNo: values.driverMobileNo || '',
-                amount: values.amount || 0,
-            };
+            // Find the matching indent record to populate all store_in fields
+            const indentRecord = indentSheet.find(
+                (i: IndentSheetRecord) => i.indentNumber === selectedIndent?.indentNo
+            );
 
-            await postToSheet([newStoreInRecord], 'insert', 'STORE IN');
+            if (isEditMode) {
+                // ── EDIT MODE: Update existing store_in record ──
+                const existingRecord = storeInSheet.find(
+                    (s: StoreInRecord) => s.indentNo === selectedIndent?.indentNo
+                ) as any;
 
-            toast.success(`Created store record for ${selectedIndent?.indentNo}`);
+                if (!existingRecord?.rowIndex) {
+                    toast.error('Could not find existing record to update');
+                    return;
+                }
+
+                const updatePayload: any = {
+                    rowIndex: existingRecord.rowIndex,
+                    vendorName: values.vendorName || '',
+                    billStatus: values.billStatus,
+                    billNo: values.billNo || '',
+                    qty: values.qty || 0,
+                    leadTimeToLiftMaterial: Number(values.leadTime) || 0,
+                    typeOfBill: values.typeOfBill || '',
+                    billAmount: values.billAmount || 0,
+                    discountAmount: values.discountAmount || 0,
+                    paymentType: values.paymentType || '',
+                    advanceAmountIfAny: values.advanceAmount || 0,
+                    billRemark: values.billRemark || '',
+                    transportationInclude: values.transportationInclude || '',
+                    transporterName: values.transporterName || '',
+                    vehicleNo: values.vehicleNo || '',
+                    driverName: values.driverName || '',
+                    driverMobileNo: values.driverMobileNo || '',
+                    amount: values.amount || 0,
+                };
+
+                // Only update photoOfBill if a new file was uploaded
+                if (photoUrl) updatePayload.photoOfBill = photoUrl;
+
+                await postToSheet([updatePayload], 'update', 'STORE IN');
+
+                toast.success(`Updated store record for ${selectedIndent?.indentNo}`);
+            } else {
+                // ── INSERT MODE: Create new store_in record ──
+                const newStoreInRecord = {
+                    timestamp: new Date().toISOString(),
+                    indentNo: selectedIndent?.indentNo || '',
+                    firmNameMatch: selectedIndent?.firmNameMatch || '',
+                    poNumber: selectedIndent?.poNumber || '',
+                    vendorName: values.vendorName || '',
+                    productName: selectedIndent?.product || '',
+                    billStatus: values.billStatus,
+                    billNo: values.billNo || '',
+                    qty: values.qty || selectedIndent?.quantity || 0,
+                    leadTimeToLiftMaterial: Number(values.leadTime) || 0,
+                    typeOfBill: values.typeOfBill || '',
+                    billAmount: values.billAmount || 0,
+                    discountAmount: values.discountAmount || 0,
+                    paymentType: values.paymentType || '',
+                    advanceAmountIfAny: values.advanceAmount || 0,
+                    photoOfBill: photoUrl,
+                    billRemark: values.billRemark || '',
+                    transportationInclude: values.transportationInclude || '',
+                    transporterName: values.transporterName || '',
+                    vehicleNo: values.vehicleNo || '',
+                    driverName: values.driverName || '',
+                    driverMobileNo: values.driverMobileNo || '',
+                    amount: values.amount || 0,
+                    planned6: new Date().toISOString().split('T')[0], // date column — YYYY-MM-DD only
+                    // Additional fields from indent data to fill all store_in columns
+                    indentDate: (indentRecord as any)?.timestamp ? new Date((indentRecord as any).timestamp).toISOString().split('T')[0] : null,
+                    indentQty: Number((indentRecord as any)?.approvedQuantity) || Number((indentRecord as any)?.quantity) || 0,
+                    poDate: selectedIndent?.poDate ? new Date(selectedIndent.poDate as string).toISOString().split('T')[0] : null,
+                    materialDate: new Date().toISOString().split('T')[0],
+                    partyName: values.vendorName || (indentRecord as any)?.approvedVendorName || '',
+                    indentedFor: (indentRecord as any)?.areaOfUse || '',
+                    approvedPartyName: (indentRecord as any)?.approvedVendorName || '',
+                    rate: Number((indentRecord as any)?.approvedRate) || 0,
+                    totalRate: (Number((indentRecord as any)?.approvedRate) || 0) * (values.qty || Number((indentRecord as any)?.approvedQuantity) || 0),
+                };
+
+                await postToSheet([newStoreInRecord], 'insert', 'STORE IN');
+
+                // Update the indent's actual5, pendingLiftQty and liftingStatus
+                const indentToUpdate = indentSheet.find(
+                    (i: IndentSheetRecord) => i.indentNumber === selectedIndent?.indentNo
+                );
+
+                const receivedQty = values.qty || 0;
+                const currentPending = Number(indentToUpdate?.pendingLiftQty) || Number(selectedIndent?.pendingLiftQty) || 0;
+                const updatedPending = Math.max(0, currentPending - receivedQty);
+                const isComplete = updatedPending <= 0;
+
+                if (indentToUpdate && indentToUpdate.rowIndex) {
+                    await postToSheet(
+                        [{
+                            rowIndex: indentToUpdate.rowIndex,
+                            indentNumber: indentToUpdate.indentNumber,
+                            actual5: new Date().toISOString(),
+                            pendingLiftQty: updatedPending,
+                            liftingStatus: isComplete ? 'Complete' : 'Pending',
+                        }],
+                        'update',
+                        'INDENT'
+                    );
+                }
+
+                toast.success(`Created store record for ${selectedIndent?.indentNo}`);
+            }
+
             setOpenDialog(false);
             form.reset();
-            setTimeout(() => updateStoreInSheet(), 1000);
-        } catch {
-            toast.error('Failed to create store record');
+            setTimeout(() => {
+                updateStoreInSheet();
+                updateIndentSheet();
+            }, 1000);
+        } catch (error) {
+            console.error('Error in onSubmit:', error);
+            toast.error(isEditMode ? 'Failed to update store record' : 'Failed to create store record');
         }
     }
 
-    function onError(e: any) {
-        console.log(e);
+    function onError() {
         toast.error('Please fill all required fields');
     }
 
@@ -552,11 +756,11 @@ export default function GetPurchase() {
                     </Tabs>
 
                     {selectedIndent && (
-                        <DialogContent className="bg-white rounded-2xl border-2 border-gray-200 shadow-2xl max-w-4xl">
+                        <DialogContent className="bg-white rounded-2xl border-2 border-gray-200 shadow-2xl max-w-4xl max-h-[90vh] overflow-y-auto">
                             <Form {...form}>
                                 <form
                                     onSubmit={form.handleSubmit(onSubmit, onError)}
-                                    className="space-y-6 p-6 max-h-[80vh] overflow-y-auto"
+                                    className="space-y-6 p-6"
                                 >
                                     <DialogHeader className="text-center">
                                         <DialogTitle className="text-2xl font-bold text-gray-800">
@@ -702,7 +906,7 @@ export default function GetPurchase() {
                                                         const filteredVendors = vendorOptions.filter(vendor =>
                                                             vendor.toLowerCase().includes(vendorSearch.toLowerCase())
                                                         );
-                                                        
+
                                                         return (
                                                             <FormItem>
                                                                 <FormLabel className="font-semibold text-gray-700">Vendor Name</FormLabel>
@@ -1009,15 +1213,15 @@ export default function GetPurchase() {
 
                                     <DialogFooter className="flex justify-center gap-4 pt-6">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close
                                             </Button>
                                         </DialogClose>
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             disabled={form.formState.isSubmitting}
                                             className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl px-8 py-3 text-lg font-semibold border-0"
                                         >

@@ -28,6 +28,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 
+const formatDate = (dateString: string): string => {
+    if (!dateString) return '';
+    try {
+        const dateObj = new Date(dateString);
+        if (isNaN(dateObj.getTime())) return dateString;
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = String(dateObj.getFullYear()).slice(-2);
+        return `${day}/${month}/${year}`;
+    } catch {
+        return dateString;
+    }
+};
+
 interface StoreInPendingData {
     liftNumber: string;
     indentNumber: string;
@@ -45,6 +59,8 @@ interface StoreInPendingData {
     amount: number;
     firmNameMatch: string;
     reason: string;
+    timestamp: string;
+    plannedDate: string;
 }
 
 interface StoreInHistoryData {
@@ -88,13 +104,13 @@ export default () => {
     });
 
     useEffect(() => {
-        const filteredByFirm = storeInSheet.filter(item => 
+        const filteredByFirm = storeInSheet.filter(item =>
             user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
-        
+
         const pendingItems = filteredByFirm.filter((i) => i.planned9 !== '' && i.actual9 === '');
         const historyItems = filteredByFirm.filter((i) => i.planned9 !== '' && i.actual9 !== '');
-        
+
         setPendingData(
             pendingItems.map((i) => ({
                 liftNumber: i.liftNumber || '',
@@ -113,6 +129,8 @@ export default () => {
                 amount: i.amount || 0,
                 firmNameMatch: i.firmNameMatch || '',
                 reason: i.reason || '',
+                timestamp: i.timestamp || '',
+                plannedDate: i.planned9 || '',
             }))
         );
 
@@ -142,7 +160,7 @@ export default () => {
         );
 
         const totalAmount = pendingItems.reduce((sum, item) => sum + (item.billAmount || 0), 0);
-        
+
         setStats({
             pending: pendingItems.length,
             processed: historyItems.length,
@@ -176,22 +194,38 @@ export default () => {
                 },
             ]
             : []),
-        { 
-            accessorKey: 'liftNumber', 
+        {
+            accessorKey: 'timestamp',
+            header: 'Timestamp',
+            cell: ({ row }) => (
+                <span className="text-gray-500 text-xs font-medium">{formatDate(row.original.timestamp)}</span>
+            )
+        },
+        {
+            accessorKey: 'plannedDate',
+            header: 'Planned Date',
+            cell: ({ row }) => (
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                    {formatDate(row.original.plannedDate)}
+                </Badge>
+            )
+        },
+        {
+            accessorKey: 'liftNumber',
             header: 'Lift No.',
             cell: ({ row }) => (
                 <span className="font-medium text-purple-700">{row.original.liftNumber}</span>
             )
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -200,29 +234,29 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.billNo}</span>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -230,15 +264,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'billAmount', 
+        {
+            accessorKey: 'billAmount',
             header: 'Bill Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.billAmount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'paymentType', 
+        {
+            accessorKey: 'paymentType',
             header: 'Payment',
             cell: ({ row }) => {
                 const type = row.original.paymentType;
@@ -270,8 +304,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'transportationInclude', 
+        {
+            accessorKey: 'transportationInclude',
             header: 'Transport',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -279,15 +313,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'amount', 
+        {
+            accessorKey: 'amount',
             header: 'Amount',
             cell: ({ row }) => (
                 <span className="font-medium">₹{row.original.amount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'reason', 
+        {
+            accessorKey: 'reason',
             header: 'Reason',
             cell: ({ row }) => (
                 <div className="max-w-xs truncate" title={row.original.reason}>
@@ -298,15 +332,15 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<StoreInHistoryData>[] = [
-        { 
-            accessorKey: 'liftNumber', 
+        {
+            accessorKey: 'liftNumber',
             header: 'Lift No.',
             cell: ({ row }) => (
                 <span className="font-medium text-purple-700">{row.original.liftNumber}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -315,36 +349,36 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.billNo}</span>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -352,15 +386,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'billAmount', 
+        {
+            accessorKey: 'billAmount',
             header: 'Bill Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.billAmount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'paymentType', 
+        {
+            accessorKey: 'paymentType',
             header: 'Payment',
             cell: ({ row }) => {
                 const type = row.original.paymentType;
@@ -392,8 +426,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'transportationInclude', 
+        {
+            accessorKey: 'transportationInclude',
             header: 'Transport',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -410,11 +444,10 @@ export default () => {
                 return (
                     <Badge
                         variant={isReturn ? "default" : "outline"}
-                        className={`inline-flex items-center gap-1 ${
-                            isReturn
-                                ? 'bg-blue-100 text-blue-800 hover:bg-blue-100'
-                                : 'bg-gray-100 text-gray-800 hover:bg-gray-100'
-                        }`}
+                        className={`inline-flex items-center gap-1 ${isReturn
+                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-100'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-100'
+                            }`}
                     >
                         {isReturn ? (
                             <Receipt className="h-3 w-3" />
@@ -426,8 +459,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'reason', 
+        {
+            accessorKey: 'reason',
             header: 'Reason',
             cell: ({ row }) => (
                 <div className="max-w-xs truncate" title={row.original.reason}>
@@ -444,11 +477,10 @@ export default () => {
                 return (
                     <Badge
                         variant={isReturn ? "default" : "outline"}
-                        className={`inline-flex items-center gap-1 ${
-                            isReturn
-                                ? 'bg-purple-100 text-purple-800 hover:bg-purple-100'
-                                : 'bg-gray-100 text-gray-800 hover:bg-gray-100'
-                        }`}
+                        className={`inline-flex items-center gap-1 ${isReturn
+                            ? 'bg-purple-100 text-purple-800 hover:bg-purple-100'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-100'
+                            }`}
                     >
                         {isReturn ? (
                             <Package className="h-3 w-3" />
@@ -546,32 +578,18 @@ export default () => {
 
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
-            console.log('📝 Form values:', values);
-            console.log('📦 Selected item:', selectedItem);
-            
-            const currentDateTime = new Date()
-                .toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-                .replace(',', '');
+
+            const currentDateTime = new Date().toISOString();
 
             let debitNoteCopyUrl: string = '';
 
             if (values.debitNoteCopy) {
                 try {
                     setUploadingFile(true);
-                    console.log('📤 Uploading debit note copy...');
                     debitNoteCopyUrl = await uploadFile({
                         file: values.debitNoteCopy,
                         folderId: import.meta.env.VITE_COMPARISON_SHEET_FOLDER
                     });
-                    console.log('✅ File uploaded:', debitNoteCopyUrl);
                 } catch (uploadError) {
                     console.error('❌ Upload error:', uploadError);
                     toast.error('Failed to upload file');
@@ -585,7 +603,6 @@ export default () => {
                 (s) => s.liftNumber === selectedItem?.liftNumber
             );
 
-            console.log('🔍 Filtered data:', filteredData);
 
             if (filteredData.length === 0) {
                 console.error('❌ No matching record found');
@@ -600,17 +617,15 @@ export default () => {
                 debitNoteNumber: values.debitNoteNumber,
             }));
 
-            console.log('📤 Update data:', updateData);
 
             await postToSheet(updateData, 'update', 'STORE IN');
 
-            console.log('✅ Update successful');
             toast.success(`Debit note sent for ${selectedItem?.indentNumber}`);
             setOpenDialog(false);
             setTimeout(() => updateAll(), 1000);
         } catch (error) {
             console.error('❌ Error in onSubmit:', error);
-            
+
             if (error instanceof Error) {
                 toast.error(`Failed to update: ${error.message}`);
             } else {
@@ -652,7 +667,7 @@ export default () => {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -666,7 +681,7 @@ export default () => {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -681,39 +696,39 @@ export default () => {
                     </div>
                 </div>
 
-                {/* Main Content Card */}
-                <Card className="bg-white shadow-lg border-0 mb-6">
-                    <CardContent className="p-0">
-                        <Tabs defaultValue="pending" className="w-full" onValueChange={setActiveTab}>
-                            <div className="border-b">
-                                <TabsList className="h-14 bg-transparent px-6">
-                                    <TabsTrigger 
-                                        value="pending" 
-                                        className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none h-14 px-4"
-                                    >
-                                        <AlertCircle className="mr-2 h-4 w-4" />
-                                        Pending Debit Notes
-                                        {stats.pending > 0 && (
-                                            <span className="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                                                {stats.pending}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                    <TabsTrigger 
-                                        value="history" 
-                                        className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none h-14 px-4"
-                                    >
-                                        <CheckCircle className="mr-2 h-4 w-4" />
-                                        History
-                                        {stats.processed > 0 && (
-                                            <span className="ml-2 bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                                                {stats.processed}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                </TabsList>
-                            </div>
-                            
+                {/* Main Content */}
+                <Card className="bg-white shadow-lg border-0 overflow-hidden mb-6">
+                    <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                        <div className="bg-gray-50/50 border-b">
+                            <TabsList className="w-full max-w-md grid grid-cols-2 p-1 bg-gray-100/50 m-4 rounded-xl">
+                                <TabsTrigger
+                                    value="pending"
+                                    className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-purple-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <AlertCircle size={16} className={activeTab === 'pending' ? 'text-purple-500' : 'text-gray-400'} />
+                                    <span>Pending Debit Notes</span>
+                                    {stats.pending > 0 && (
+                                        <span className="ml-1 bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                            {stats.pending}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="history"
+                                    className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-green-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <CheckCircle size={16} className={activeTab === 'history' ? 'text-green-500' : 'text-gray-400'} />
+                                    <span>History</span>
+                                    {stats.processed > 0 && (
+                                        <span className="ml-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                            {stats.processed}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
+
+                        <CardContent className="p-0">
                             <div className="p-6">
                                 {/* PENDING TAB CONTENT */}
                                 <TabsContent value="pending" className="m-0">
@@ -740,7 +755,7 @@ export default () => {
                                         </div>
                                     )}
                                 </TabsContent>
-                                
+
                                 {/* HISTORY TAB CONTENT */}
                                 <TabsContent value="history" className="m-0">
                                     {historyData.length > 0 ? (
@@ -767,8 +782,8 @@ export default () => {
                                     )}
                                 </TabsContent>
                             </div>
-                        </Tabs>
-                    </CardContent>
+                        </CardContent>
+                    </Tabs>
                 </Card>
 
                 {/* Send Debit Note Dialog */}
@@ -872,7 +887,7 @@ export default () => {
                                                 </FormItem>
                                             )}
                                         />
-                                        
+
                                         <FormField
                                             control={form.control}
                                             name="debitNoteNumber"
@@ -901,8 +916,8 @@ export default () => {
                                                 Cancel
                                             </Button>
                                         </DialogClose>
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             className="bg-purple-600 hover:bg-purple-700 shadow-sm"
                                             disabled={form.formState.isSubmitting || uploadingFile}
                                         >

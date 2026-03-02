@@ -141,12 +141,17 @@ const routes: RouteAttributes[] = [
         name: 'Approve Indent',
         icon: <ClipboardCheck size={20} />,
         element: <ApproveIndent />,
-        notifications: (sheets: any[]) =>
-            sheets.filter(
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter(
                 (sheet: any) =>
-                    sheet.planned1 !== '' &&
-                    sheet.vendorType === ''
-            ).length,
+                    (user?.firmNameMatch?.toLowerCase() === "all" ||
+                        sheet.firmName === user?.firmNameMatch ||
+                        sheet.firmNameMatch === user?.firmNameMatch) &&
+                    sheet.planned1 && sheet.planned1.toString().trim() !== '' &&
+                    (!sheet.actual1 || sheet.actual1.toString().trim() === '')
+            ).length;
+        },
     },
     {
         path: 'vendor-rate-update',
@@ -154,8 +159,18 @@ const routes: RouteAttributes[] = [
         name: 'Vendor Rate Update',
         icon: <UserCheck size={20} />,
         element: <VendorUpdate />,
-        notifications: (sheets: any[]) =>
-            sheets.filter((sheet: any) => sheet.planned2 !== '' && sheet.actual2 === '').length,
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter(
+                (sheet: any) =>
+                    (user?.firmNameMatch?.toLowerCase() === "all" ||
+                        sheet.firmName === user?.firmNameMatch ||
+                        sheet.firmNameMatch === user?.firmNameMatch) &&
+                    sheet.planned2 && sheet.planned2.toString().trim() !== '' &&
+                    (!sheet.actual2 || sheet.actual2.toString().trim() === '') &&
+                    sheet.vendorType?.toLowerCase() !== 'reject'
+            ).length;
+        },
     },
     {
         path: 'three-party-approval',
@@ -163,13 +178,18 @@ const routes: RouteAttributes[] = [
         name: 'Three Party Approval',
         icon: <Users size={20} />,
         element: <RateApproval />,
-        notifications: (sheets: any[]) =>
-            sheets.filter(
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter(
                 (sheet: any) =>
-                    sheet.planned3 !== '' &&
-                    sheet.actual3 === '' &&
+                    (user?.firmNameMatch?.toLowerCase() === "all" ||
+                        sheet.firmName === user?.firmNameMatch ||
+                        sheet.firmNameMatch === user?.firmNameMatch) &&
+                    sheet.planned3 && sheet.planned3.toString().trim() !== '' &&
+                    (!sheet.actual3 || sheet.actual3.toString().trim() === '') &&
                     sheet.vendorType === 'Three Party'
-            ).length,
+            ).length;
+        },
     },
     // {
     //     path: 'pending-pos',
@@ -229,13 +249,16 @@ const routes: RouteAttributes[] = [
         name: 'Lifting',
         icon: <Package2 size={20} />,
         element: <GetLift />,
-        notifications: (sheets: any[]) =>
-            sheets.filter(
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter(
                 (sheet: any) =>
+                    (user?.firmNameMatch?.toLowerCase() === "all" || sheet.firmNameMatch === user?.firmNameMatch) &&
                     sheet.liftingStatus === 'Pending' &&
                     sheet.planned5 &&
                     sheet.planned5.toString().trim() !== ''
-            ).length,
+            ).length;
+        },
     },
 
 
@@ -245,11 +268,14 @@ const routes: RouteAttributes[] = [
         name: 'Store In',
         icon: <Truck size={20} />,
         element: <StoreIn />,
-        notifications: (sheets: any[]) =>
-            sheets.filter((sheet: any) =>
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter((sheet: any) =>
+                (user?.firmNameMatch?.toLowerCase() === "all" || sheet.firmNameMatch === user?.firmNameMatch) &&
                 sheet.planned6 !== '' &&
                 sheet.actual6 === ''
-            ).length,
+            ).length;
+        },
     },
 
     {
@@ -258,12 +284,15 @@ const routes: RouteAttributes[] = [
         name: 'Freight Full Kiting',
         icon: <FilePlus2 size={20} />,
         element: <FullKiting />,
-        notifications: (sheets: any[]) =>
-            sheets.filter((sheet: any) =>
+        notifications: (sheets: any[], context?: any) => {
+            const user = context?.user;
+            return sheets.filter((sheet: any) =>
+                (user?.firmNameMatch?.toLowerCase() === "all" || sheet.firmNameMatch === user?.firmNameMatch) &&
                 sheet.planned &&
                 sheet.planned.toString().trim() !== '' &&
                 (!sheet.actual || sheet.actual.toString().trim() === '')
-            ).length,
+            ).length;
+        },
     },
     // In your routes configuration
     // In your routes configuration
@@ -272,11 +301,14 @@ const routes: RouteAttributes[] = [
         path: 'freight-payment',
         icon: <CreditCard size={18} />,
         element: <FreightPayment />,
-        notifications: (sheetData: any[]) => {
+        notifications: (sheetData: any[], context?: any) => {
+            const user = context?.user;
             if (!sheetData || !Array.isArray(sheetData)) return 0;
 
-            // Filter items where Planned1 is not empty and Actual1 is empty
+            // Filter items where transportingInclude is 'Yes', Planned1 is not empty and Actual1 is empty
             const pendingPayments = sheetData.filter(item =>
+                (user?.firmNameMatch?.toLowerCase() === "all" || item.firmNameMatch === user?.firmNameMatch) &&
+                item.transportingInclude === 'Yes' &&
                 item.planned1 &&
                 item.planned1 !== '' &&
                 (!item.actual1 || item.actual1 === '')
@@ -286,6 +318,56 @@ const routes: RouteAttributes[] = [
         }
     }
     ,
+    {
+        name: 'HOD Approval',
+        path: 'pi-approvals',
+        element: <ExchangeMaterials />,
+        icon: <Package2 size={18} />,
+        notifications: (poMasterData: any[], context?: any) => {
+            // Get sheets from context
+            const piApprovalSheet = context?.piApprovalSheet || [];
+            const user = context?.user || {};
+
+            if (!poMasterData || !Array.isArray(poMasterData)) return 0;
+
+            // Create Sets for approved POs and Indents
+            const approvedPONumbers = new Set(
+                piApprovalSheet.map((pi: any) => pi.poNumber?.toString().trim()).filter(Boolean)
+            );
+            const approvedIndentNumbers = new Set(
+                piApprovalSheet.map((pi: any) => pi.indentNo?.toString().trim()).filter(Boolean)
+            );
+
+            // Get unique pending POs/Indents
+            const uniquePendingPOs = new Set<string>();
+            const seenIndents = new Set<string>();
+
+            poMasterData.forEach((po: any) => {
+                const poNumber = po.poNumber?.toString().trim() || '';
+                const indentNo = po.internalCode?.toString().trim() || '';
+                const firmNameMatch = po.firmNameMatch?.trim() || '';
+                const status = po.status?.toLowerCase()?.trim() || '';
+                const userFirm = user?.firmNameMatch?.toLowerCase() || '';
+
+                if (!poNumber) return;
+
+                // Skip if already approved (by PO or Indent)
+                if (approvedPONumbers.has(poNumber) || approvedIndentNumbers.has(indentNo)) return;
+
+                // Filter by status and firm
+                if (status !== 'pending' && status !== '') return;
+                if (userFirm !== 'all' && firmNameMatch.toLowerCase() !== userFirm) return;
+
+                // Only count unique indents to match "latest revision" logic in UI
+                if (indentNo && seenIndents.has(indentNo)) return;
+                if (indentNo) seenIndents.add(indentNo);
+
+                uniquePendingPOs.add(poNumber);
+            });
+
+            return uniquePendingPOs.size;
+        }
+    },
     // In your routes configuration
     {
         name: 'Fixed Asset Payment',
@@ -351,63 +433,15 @@ const routes: RouteAttributes[] = [
         }
     },
 
-    {
-        name: 'HOD Approval',
-        path: 'pi-approvals',
-        element: <ExchangeMaterials />,
-        icon: <Package2 size={18} />,
-        notifications: (poMasterData: any[], context?: any) => {
-            // Get sheets from context
-            const piApprovalSheet = context?.piApprovalSheet || [];
-            const user = context?.user || {};
-
-            if (!poMasterData || !Array.isArray(poMasterData)) return 0;
-
-            // Create Set of approved PO numbers from PI Approval sheet
-            const approvedPONumbers = new Set(
-                piApprovalSheet
-                    .map((pi: any) => pi.poNumber || pi.piNo || '') // Try both poNumber and piNo
-                    .filter(Boolean) // Remove empty values
-            );
-
-            // Get unique pending PO numbers
-            const uniquePendingPOs = new Set<string>();
-
-            poMasterData.forEach((po: any) => {
-                const poNumber = po.poNumber?.trim() || '';
-                const firmNameMatch = po.firmNameMatch?.trim() || '';
-                const status = po.status?.toLowerCase()?.trim() || '';
-                const userFirm = user?.firmNameMatch?.toLowerCase() || '';
-
-                // Skip if no PO number
-                if (!poNumber) return;
-
-                // Skip if already approved in PI Approval sheet
-                if (approvedPONumbers.has(poNumber)) return;
-
-                // Filter by status (same as PI Approvals page)
-                if (status !== 'pending' && status !== '') return;
-
-                // Filter by firm (same as PI Approvals page)
-                if (userFirm !== 'all' && firmNameMatch.toLowerCase() !== userFirm) return;
-
-                // Add unique PO number
-                uniquePendingPOs.add(poNumber);
-            });
-
-            return uniquePendingPOs.size;
-        }
-    },
-
-    {
-        path: 'exchange-materials',
-        gateKey: 'exchangeMaterials',  // ✅ Fixed: use existing permission
-        // Kept similar but different
-        name: 'Exchange Materials',
-        icon: <PackageCheck size={20} />,
-        element: <Exchange />,
-        notifications: () => 0,
-    },
+    // {
+    //     path: 'exchange-materials',
+    //     gateKey: 'exchangeMaterials',  // ✅ Fixed: use existing permission
+    //     // Kept similar but different
+    //     name: 'Exchange Materials',
+    //     icon: <PackageCheck size={20} />,
+    //     element: <Exchange />,
+    //     notifications: () => 0,
+    // },
 
     // {
     //     path: 'Payment-Status',
@@ -514,11 +548,11 @@ const routes: RouteAttributes[] = [
         icon: <Users size={20} />,
         element: <AuditData />,
         notifications: (sheets: any[]) =>
-            sheets.filter((sheet: any) =>
-                sheet.planned1 &&
-                sheet.planned1.toString().trim() !== '' &&
-                (!sheet.actual1 || sheet.actual1.toString().trim() === '')
-            ).length,
+            sheets.filter((sheet: any) => {
+                const isComp = sheet.isCompleted || sheet.is_completed;
+                const hasAnyPlanned = sheet.planned1 || sheet.planned2 || sheet.planned3 || sheet.planned4 || sheet.planned5;
+                return !isComp && hasAnyPlanned;
+            }).length,
     },
 
     //    // In your routes configuration

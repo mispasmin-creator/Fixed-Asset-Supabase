@@ -18,18 +18,36 @@ export default () => {
     const [visible, setVisible] = useState(false);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        if (loggedIn) {
-            navigate('/');
-        }
-    }, [loggedIn]);
-
     const schema = z.object({
         username: z.string().nonempty(),
         password: z.string().nonempty(),
     });
 
     const form = useForm({ resolver: zodResolver(schema) });
+
+    // On mount: pre-fill saved credentials and auto-submit if present
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem('auth');
+            if (stored) {
+                const { username, password } = JSON.parse(stored);
+                if (username && password) {
+                    form.setValue('username', username);
+                    form.setValue('password', password);
+                    // Auto-submit so the user is logged in immediately
+                    form.handleSubmit(onSubmit)();
+                }
+            }
+        } catch {
+            // Ignore malformed data
+        }
+    }, []);
+
+    useEffect(() => {
+        if (loggedIn) {
+            navigate('/');
+        }
+    }, [loggedIn]);
 
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
@@ -53,7 +71,7 @@ export default () => {
                     <form onSubmit={form.handleSubmit(onSubmit, onError)} className="grid gap-6">
                         <CardHeader className="text-center flex justify-center flex-col items-center">
                             <Logo size={150} />
-                            <CardTitle className="font-bold text-3xl">Fixed Aesset App</CardTitle>
+                            <CardTitle className="font-bold text-3xl">Fixed Asset App</CardTitle>
                             <CardDescription>Please login to your account</CardDescription>
                         </CardHeader>
                         <CardContent className="grid gap-4">

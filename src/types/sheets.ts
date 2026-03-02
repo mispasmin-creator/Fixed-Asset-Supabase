@@ -1,16 +1,16 @@
-export type Sheet = 
-    | 'INDENT' 
-    | 'RECEIVED' 
-    | 'MASTER' 
-    | 'USER' 
-    | 'PO MASTER' 
-    | 'INVENTORY' 
-    | 'ISSUE' 
-    | 'STORE IN' 
-    | 'TALLY ENTRY' 
-    | 'PC REPORT' 
-    | 'Fullkitting' 
-    | 'Payment History' 
+export type Sheet =
+    | 'INDENT'
+    | 'RECEIVED'
+    | 'MASTER'
+    | 'USER'
+    | 'PO MASTER'
+    | 'INVENTORY'
+    | 'ISSUE'
+    | 'STORE IN'
+    | 'TALLY ENTRY'
+    | 'Fullkitting'
+    | 'Payment History'
+    | 'VENDORS'
     | 'PI APPROVAL';  // ✅ Already included
 
 export type IndentSheet = {
@@ -23,6 +23,7 @@ export type IndentSheet = {
     areaOfUse: string;
     groupHead: string;
     productName: string;
+    productCode: string;
     quantity: number;
     uom: string;
     specifications: string;
@@ -84,6 +85,7 @@ export type IndentSheet = {
     advanceAmountIfAny: number;
     photoOfBill: string;
     indentStatus: string;
+    deliveryDate: string;
     noDay: number;
     pendingPoQty: number;
     status: string;
@@ -96,6 +98,10 @@ export type IndentSheet = {
     pendingLiftQty: number;
     firmNameMatch: string;
     paymentype: string;
+    approvedVendorId?: number;
+    vendor1Id?: number;
+    vendor2Id?: number;
+    vendor3Id?: number;
 };
 
 // ✅ IMPROVED: Better field naming consistency
@@ -110,14 +116,12 @@ export type PIApprovalSheet = {
     productName: string;             // Product Name
     qty: number;                     // Qty
     piAmount: number;                // P.I Amount
-    piCopy: string;                  // P.I Copy
     poRateWithoutTax: number;        // Po Rate Without Tax
     poNumber: string;                // PO Number
     deliveryDate: string;            // Delivery Date
     paymentTerms: string;            // Payment Terms
     internalCode: string;            // Internal Code
     totalPoAmount: number;           // Total PO Amount
-    poCopy: string;                  // Po Copy
     numberOfDays: number;            // Number Of Days
     totalPaidAmount: number;         // Total Paid Amount
     outstandingAmount: number;       // Outstanding Amount
@@ -125,8 +129,11 @@ export type PIApprovalSheet = {
     planned: string;                 // Planned
     actual: string;                  // Actual
     delay: string;                   // Delay
-    status2: string;                 // Second Status column (you have two Status columns)
     paymentForm: string;             // Payment Form
+    firmNameMatch: string;           // Firm Name Match
+    piCopy?: string;                 // PI Copy
+    poCopy?: string;                 // PO Copy
+    status1?: string;                // Status 1
 };
 
 export type PaymentHistory = {
@@ -201,9 +208,9 @@ export type PoMasterSheet = {
     amount: number;
     totalPoAmount: number;
     preparedBy?: string;  // ✅ ADDED: Based on your sheet
-    approvedBy?: string; 
-    Guarantee?:string;	
-    FreightPayment?:string;
+    approvedBy?: string;
+    Guarantee?: string;
+    FreightPayment?: string;
     pdf: string;
     quotationNumber: string;
     quotationDate: string;
@@ -225,7 +232,7 @@ export type PoMasterSheet = {
     deliveryDays: number;
     deliveryType: string;
     firmNameMatch: string;
-    
+
     // ✅ ADDED: For PI Approval integration
     piApprovalTimestamp?: string;
     piQty?: number;
@@ -235,7 +242,21 @@ export type PoMasterSheet = {
     'Freight Payment'?: string;
 };
 
+export type Vendors = {
+    id: number;
+    created_at: string;
+    vendor_name: string;
+    rate_type: string;
+    rate: number;
+    with_tax: boolean;
+    tax_value: number;
+    payment_term: string;
+    whatsapp_number: string;
+    email: string;
+};
+
 export type Vendor = {
+    id?: number;
     vendorName: string;
     gstin: string;
     address: string;
@@ -260,10 +281,13 @@ export type MasterSheet = {
     firmsnames: string[];
     firms: string[];
     fmsNames: string[];
-    firmCompanyMap: Record<string, { 
-        companyName: string; 
-        companyAddress: string; 
-        destinationAddress: string; 
+    personNames: string[];
+    locations: string[];
+    partyNames: string[];
+    firmCompanyMap: Record<string, {
+        companyName: string;
+        companyAddress: string;
+        destinationAddress: string;
     }>;
 };
 
@@ -306,7 +330,7 @@ export type UserPermissions = {
     issueData: boolean;
     piApprovalView?: boolean;
     piApprovalAction?: boolean;
-    
+
     // ✅ ADD THESE NEW PERMISSIONS BASED ON YOUR SHEET HEADER
     inventory?: boolean;          // For "Inventory" access
     poHistory?: boolean;          // For "PO History" access (mentioned in sheet)
@@ -409,7 +433,7 @@ export type StoreInSheet = {
     photoOfProduct: string;
     unitOfMeasurement: string;
     damageOrder: string;
-    quantityAsPerBill: number;
+    quantityAsPerBill: string;
     priceAsPerPo: number;
     remark: string;
     debitNoteCopy: string;
@@ -448,6 +472,7 @@ export type StoreInSheet = {
     poCopy: string;
     planned11: string;
     actual11: string;
+    timeDelay11: string;
     billStatusNew: string;
     materialStatus: string;
     vehicleNo: string;
@@ -455,10 +480,21 @@ export type StoreInSheet = {
     driverMobileNo: string;
     billImageStatus: string;
     billRemark: string;
-     productAsPerPack?: string; // ✅ ADD THIS LINE
-
+    productAsPerPack?: string;
+    // DB columns saved but previously not fetched back
+    indentDate?: string;
+    indentQty?: number;
+    materialDate?: string;
+    partyName?: string;
+    location?: string;
+    area?: string;
+    notBillReceivedNo?: string;
+    indentedFor?: string;
+    approvedPartyName?: string;
+    rate?: number;
+    totalRate?: number;
+    liftingStatus?: string;
     firmNameMatch: string;
-    
 };
 
 export type TallyEntrySheet = {
@@ -473,17 +509,18 @@ export type TallyEntrySheet = {
     productName: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
-    billImage: string;
-    billReceivedLater: string;
+    billStatus: string;
+    billImage: string[] | string;
+    billReceivedLater: boolean | string;
     notReceivedBillNo: string;
     location: string;
     typeOfBills: string;
-    productImage: string;
+    productImage: string[] | string;
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -509,22 +546,15 @@ export type TallyEntrySheet = {
     remarks4: string;
     planned5: string;
     actual5: string;
+    delay5: string;
     status5: string;
+    remarks5?: string;
     rowIndex: string;
     firmNameMatch: string;
+    isCompleted?: boolean;
+    approvedVendorId?: number;
 };
 
-export type PcReportSheet = {
-    stage: string;
-    firmName?: string;
-    totalPending: number | string;
-    totalComplete: number | string;
-    firmNameMatch?: string;
-    pendingPmpl: string | number;
-    pendingPurab: string | number;
-    pendingPmmpl: string | number;
-    pendingRefrasynth: string | number;
-};
 
 // In your SheetContext types file
 export type FullkittingSheet = {
@@ -555,7 +585,7 @@ export type FullkittingSheet = {
     amount1: number;
     biltyImage?: string;
     firmNameMatch: string;
-    
+
     // ✅ NEW COLUMNS ADDED
     planned1?: string;           // New Planned column for freight payment
     actual1?: string;            // New Actual column for freight payment

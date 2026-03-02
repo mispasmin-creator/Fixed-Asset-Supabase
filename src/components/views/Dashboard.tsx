@@ -154,7 +154,7 @@ function CustomPieTooltip({ active, payload }: any) {
                 <p className="font-bold text-gray-900 mb-2">{payload[0].name}</p>
                 <p className="text-blue-600">Orders: {payload[0].value}</p>
                 <p className="text-green-600">Items: {payload[0].payload.quantity}</p>
-                                <p className="text-purple-600">Value: ₹{payload[0].payload.value?.toLocaleString() || '0'}</p>
+                <p className="text-purple-600">Value: ₹{payload[0].payload.value?.toLocaleString() || '0'}</p>
             </div>
         );
     }
@@ -163,7 +163,7 @@ function CustomPieTooltip({ active, payload }: any) {
 
 export default function Dashboard() {
     const { indentSheet, receivedSheet, inventorySheet, issueSheet, poMasterSheet, storeInSheet } = useSheets();
-    
+
     const [chartData, setChartData] = useState<ChartDataItem[]>([]);
     const [topVendorsData, setTopVendors] = useState<VendorDataItem[]>([]);
     const [stockData, setStockData] = useState<StockDataItem[]>([]);
@@ -183,36 +183,24 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (!indentSheet || !inventorySheet || !issueSheet || !storeInSheet) {
-            console.log('Missing sheet data:', {
-                indentSheet: !!indentSheet,
-                inventorySheet: !!inventorySheet,
-                issueSheet: !!issueSheet,
-                storeInSheet: !!storeInSheet
-            });
             return;
         }
 
-        console.log('Data loaded - Sample:', {
-            indentSheetCount: indentSheet.length,
-            storeInSheetCount: storeInSheet.length,
-            issueSheetCount: issueSheet.length,
-            firstStoreInItem: storeInSheet[0]
-        });
 
         // 1. Calculate Total Indents - count unique indent numbers from INDENT sheet
         const indentNumbers = new Set<string>();
         let totalIndentQuantity = 0;
         let totalIndentValue = 0;
-        
+
         (indentSheet as SheetItem[]).forEach((item: SheetItem) => {
             const indentNo = item.indentNumber || item['Indent Number'];
             if (indentNo && typeof indentNo === 'string' && indentNo.trim() !== '') {
                 indentNumbers.add(indentNo.trim());
-                
+
                 // Calculate quantity and value
                 const quantity = Number(item.quantity || item.approvedQuantity || item['Approved Quantity'] || 0);
                 totalIndentQuantity += quantity;
-                
+
                 const rateStr = String(item.approvedRate || item['Approved Rate'] || item.rate || '0');
                 const rate = parseFloat(rateStr.replace(/,/g, ''));
                 if (!isNaN(rate)) {
@@ -225,7 +213,7 @@ export default function Dashboard() {
         const purchaseNumbers = new Set<string>();
         let totalPurchaseQuantity = 0;
         let totalPurchaseValue = 0;
-        
+
         (storeInSheet as SheetItem[]).forEach((item: SheetItem) => {
             const liftNo = item.liftNumber || item['Lift Number'] || item.liftNo || item['Lift No'];
             if (liftNo && typeof liftNo === 'string' && liftNo.trim() !== '') {
@@ -233,22 +221,22 @@ export default function Dashboard() {
                 // Check if it's a valid lift number format (contains "LN-" or similar)
                 if (trimmedLiftNo && trimmedLiftNo.length > 0) {
                     purchaseNumbers.add(trimmedLiftNo);
-                    
+
                     // Try to get quantity from indent sheet using indent number
                     const indentNo = item.indentNo || item['Indent No.'] || item.indentNumber;
                     if (indentNo) {
                         const matchingIndent = (indentSheet as SheetItem[]).find(
-                            (indent: SheetItem) => 
-                                (indent.indentNumber === indentNo) || 
+                            (indent: SheetItem) =>
+                                (indent.indentNumber === indentNo) ||
                                 (indent['Indent Number'] === indentNo) ||
                                 (String(indent.indentNumber || '').includes(String(indentNo))) ||
                                 (String(indent['Indent Number'] || '').includes(String(indentNo)))
                         );
-                        
+
                         if (matchingIndent) {
                             const quantity = Number(matchingIndent.quantity || matchingIndent.approvedQuantity || 0);
                             totalPurchaseQuantity += quantity;
-                            
+
                             const rateStr = String(matchingIndent.approvedRate || matchingIndent['Approved Rate'] || matchingIndent.rate || '0');
                             const rate = parseFloat(rateStr.replace(/,/g, ''));
                             if (!isNaN(rate)) {
@@ -264,7 +252,7 @@ export default function Dashboard() {
         const issueNumbers = new Set<string>();
         let totalIssueQuantity = 0;
         let totalIssueValue = 0;
-        
+
         (issueSheet as SheetItem[]).forEach((item: SheetItem) => {
             const issueNo = item.issueNo || item['Issue No'] || item.issueNumber || item['Issue Number'];
             if (issueNo && typeof issueNo === 'string' && issueNo.trim() !== '') {
@@ -273,7 +261,7 @@ export default function Dashboard() {
                     issueNumbers.add(trimmedIssueNo);
                 }
             }
-            
+
             // Calculate quantity and value
             const quantity = Number(item.quantity || item.givenQty || item['Given Quantity'] || 0);
             totalIssueQuantity += quantity;
@@ -286,7 +274,7 @@ export default function Dashboard() {
             const rateStr = String(item.approvedRate || item['Approved Rate'] || '0');
             const rate = parseFloat(rateStr.replace(/,/g, ''));
             const quantity = Number(item.quantity || item.approvedQuantity || item['Approved Quantity'] || 0);
-            
+
             if (!isNaN(rate) && rate > 0 && quantity > 0) {
                 calculatedStockValue += quantity * rate;
             }
@@ -298,9 +286,9 @@ export default function Dashboard() {
             const liftNo = item.liftNumber || item['Lift Number'] || item.liftNo || item['Lift No'];
             return liftNo && typeof liftNo === 'string' && liftNo.trim() !== '';
         }).length;
-        
-        const completionRateValue = indentNumbers.size > 0 
-            ? Math.round((storeInWithLift / indentNumbers.size) * 100) 
+
+        const completionRateValue = indentNumbers.size > 0
+            ? Math.round((storeInWithLift / indentNumbers.size) * 100)
             : 0;
         setCompletionRate(Math.min(completionRateValue, 100));
 
@@ -310,13 +298,13 @@ export default function Dashboard() {
             quantity: totalIndentQuantity,
             value: totalIndentValue
         });
-        
+
         setPurchase({
             count: purchaseNumbers.size,
             quantity: totalPurchaseQuantity,
             value: totalPurchaseValue
         });
-        
+
         setOut({
             count: issueNumbers.size,
             quantity: totalIssueQuantity,
@@ -325,7 +313,7 @@ export default function Dashboard() {
 
         // 7. Set chart data for top products
         const productFrequency: Record<string, { frequency: number, quantity: number, value: number }> = {};
-        
+
         (indentSheet as SheetItem[]).forEach((item: SheetItem) => {
             const productName = item.productName || item['Product Name'] || item.itemName || item['Item Name'] || 'Unknown';
             if (productName && productName !== 'Unknown') {
@@ -351,12 +339,12 @@ export default function Dashboard() {
                 quantity: data.quantity,
                 value: data.value
             }));
-        
+
         setChartData(sortedProducts);
 
         // 8. Set top vendors data
         const vendorStats: Record<string, { orders: number, quantity: number, value: number }> = {};
-        
+
         (indentSheet as SheetItem[]).forEach((item: SheetItem) => {
             const vendorName = item.firmName || item['Firm Name'] || item.vendorName || item['Vendor Name'] || 'Unknown Vendor';
             if (vendorName && vendorName !== 'Unknown Vendor') {
@@ -382,34 +370,34 @@ export default function Dashboard() {
                 quantity: data.quantity,
                 value: data.value
             }));
-        
+
         setTopVendors(sortedVendors);
 
         // 9. Set stock data
-        const stockItems = (inventorySheet as SheetItem[]).length > 0 
+        const stockItems = (inventorySheet as SheetItem[]).length > 0
             ? (inventorySheet as SheetItem[]).slice(0, 6).map((item: SheetItem) => ({
-                name: (item.itemName || item['Item Name'] || 'Unknown').toString().length > 15 
-                    ? (item.itemName || item['Item Name'] || 'Unknown').toString().substring(0, 15) + '...' 
+                name: (item.itemName || item['Item Name'] || 'Unknown').toString().length > 15
+                    ? (item.itemName || item['Item Name'] || 'Unknown').toString().substring(0, 15) + '...'
                     : item.itemName || item['Item Name'] || 'Unknown',
                 value: Number(item.totalPrice || item['Total Price'] || 0),
                 quantity: Number(item.current || item['Current Stock'] || 0),
                 status: item.colorCode || (Number(item.current || 0) === 0 ? 'red' : (Number(item.current || 0) < 10 ? 'yellow' : 'green'))
             }))
             : (indentSheet as SheetItem[]).slice(0, 6).map((item: SheetItem) => ({
-                name: (item.productName || item['Product Name'] || 'Unknown').toString().length > 15 
-                    ? (item.productName || item['Product Name'] || 'Unknown').toString().substring(0, 15) + '...' 
+                name: (item.productName || item['Product Name'] || 'Unknown').toString().length > 15
+                    ? (item.productName || item['Product Name'] || 'Unknown').toString().substring(0, 15) + '...'
                     : item.productName || item['Product Name'] || 'Unknown',
                 value: (parseFloat(String(item.approvedRate || 0).replace(/,/g, '')) || 0) * (Number(item.quantity || 0)),
                 quantity: Number(item.quantity || item.approvedQuantity || 0),
                 status: 'green'
             }));
-        
+
         setStockData(stockItems);
 
         // 10. Calculate stock alerts
         const lowStockItems = stockItems.filter(item => item.status === 'yellow' || item.status === 'red').length;
         const outOfStockItems = stockItems.filter(item => item.status === 'red').length;
-        
+
         setAlerts({
             lowStock: lowStockItems,
             outOfStock: outOfStockItems,
@@ -435,8 +423,8 @@ export default function Dashboard() {
             if (timestamp) {
                 try {
                     const date = new Date(timestamp);
-                    const monthIndex = last6MonthsData.findIndex(m => 
-                        m.month === date.toLocaleString('default', { month: 'short' }) && 
+                    const monthIndex = last6MonthsData.findIndex(m =>
+                        m.month === date.toLocaleString('default', { month: 'short' }) &&
                         m.year === date.getFullYear()
                     );
                     if (monthIndex !== -1) {
@@ -453,8 +441,8 @@ export default function Dashboard() {
             if (timestamp) {
                 try {
                     const date = new Date(timestamp);
-                    const monthIndex = last6MonthsData.findIndex(m => 
-                        m.month === date.toLocaleString('default', { month: 'short' }) && 
+                    const monthIndex = last6MonthsData.findIndex(m =>
+                        m.month === date.toLocaleString('default', { month: 'short' }) &&
                         m.year === date.getFullYear()
                     );
                     if (monthIndex !== -1) {
@@ -471,8 +459,8 @@ export default function Dashboard() {
             if (timestamp) {
                 try {
                     const date = new Date(timestamp);
-                    const monthIndex = last6MonthsData.findIndex(m => 
-                        m.month === date.toLocaleString('default', { month: 'short' }) && 
+                    const monthIndex = last6MonthsData.findIndex(m =>
+                        m.month === date.toLocaleString('default', { month: 'short' }) &&
                         m.year === date.getFullYear()
                     );
                     if (monthIndex !== -1) {
@@ -496,9 +484,9 @@ export default function Dashboard() {
         const validLeadTimes = (indentSheet as SheetItem[])
             .filter(item => item.noDay && Number(item.noDay) > 0)
             .map(item => Number(item.noDay) || 0);
-        
-        const avgTime = validLeadTimes.length > 0 
-            ? validLeadTimes.reduce((sum, time) => sum + time, 0) / validLeadTimes.length 
+
+        const avgTime = validLeadTimes.length > 0
+            ? validLeadTimes.reduce((sum, time) => sum + time, 0) / validLeadTimes.length
             : 7;
         setAvgLeadTime(Math.round(avgTime));
 
@@ -506,7 +494,7 @@ export default function Dashboard() {
 
     // JSX return remains exactly the same as in the previous code...
     // [Rest of your JSX code stays exactly the same - just copy from previous answer]
-    
+
     return (
         <div className="bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen p-4 md:p-6">
             <div className="max-w-7xl mx-auto">
@@ -545,14 +533,14 @@ export default function Dashboard() {
                                     <p className="text-sm font-medium text-gray-500">Indent Completion</p>
                                     <div className="flex items-center gap-2 mt-2">
                                         <p className="text-2xl font-bold text-gray-900">{completionRate}%</p>
-                                        <Badge 
-                                            variant="outline" 
-                                            className={`${completionRate >= 80 
-                                                ? 'bg-green-100 text-green-800 border-green-200' 
+                                        <Badge
+                                            variant="outline"
+                                            className={`${completionRate >= 80
+                                                ? 'bg-green-100 text-green-800 border-green-200'
                                                 : completionRate >= 50
-                                                ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                                : 'bg-red-100 text-red-800 border-red-200'
-                                            }`}
+                                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                                    : 'bg-red-100 text-red-800 border-red-200'
+                                                }`}
                                         >
                                             {completionRate >= 80 ? (
                                                 <ArrowUpRight className="h-3 w-3 mr-1" />
@@ -571,12 +559,11 @@ export default function Dashboard() {
                             </div>
                             {/* Custom Progress Bar */}
                             <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                                <div 
-                                    className={`h-2 rounded-full transition-all duration-300 ${
-                                        completionRate >= 80 ? 'bg-green-500' :
-                                        completionRate >= 50 ? 'bg-amber-500' :
-                                        'bg-red-500'
-                                    }`}
+                                <div
+                                    className={`h-2 rounded-full transition-all duration-300 ${completionRate >= 80 ? 'bg-green-500' :
+                                            completionRate >= 50 ? 'bg-amber-500' :
+                                                'bg-red-500'
+                                        }`}
                                     style={{ width: `${Math.min(completionRate, 100)}%` }}
                                 ></div>
                             </div>
@@ -639,8 +626,8 @@ export default function Dashboard() {
                                         <p className="text-4xl font-black mb-1">{indent.count}</p>
                                         <div className="flex items-center gap-2">
                                             <div className="w-full bg-blue-400/30 rounded-full h-2">
-                                                <div 
-                                                    className="bg-white h-2 rounded-full" 
+                                                <div
+                                                    className="bg-white h-2 rounded-full"
                                                     style={{ width: `${Math.min((indent.count / 50) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
@@ -677,8 +664,8 @@ export default function Dashboard() {
                                         <p className="text-4xl font-black mb-1">{purchase.count}</p>
                                         <div className="flex items-center gap-2">
                                             <div className="w-full bg-green-400/30 rounded-full h-2">
-                                                <div 
-                                                    className="bg-white h-2 rounded-full" 
+                                                <div
+                                                    className="bg-white h-2 rounded-full"
                                                     style={{ width: `${Math.min((purchase.count / 50) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
@@ -715,8 +702,8 @@ export default function Dashboard() {
                                         <p className="text-4xl font-black mb-1">{out.count}</p>
                                         <div className="flex items-center gap-2">
                                             <div className="w-full bg-orange-400/30 rounded-full h-2">
-                                                <div 
-                                                    className="bg-white h-2 rounded-full" 
+                                                <div
+                                                    className="bg-white h-2 rounded-full"
                                                     style={{ width: `${Math.min((out.count / 50) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
@@ -753,8 +740,8 @@ export default function Dashboard() {
                                         <p className="text-4xl font-black mb-1">{alerts.outOfStock}</p>
                                         <div className="flex items-center gap-2">
                                             <div className="w-full bg-purple-400/30 rounded-full h-2">
-                                                <div 
-                                                    className="bg-white h-2 rounded-full" 
+                                                <div
+                                                    className="bg-white h-2 rounded-full"
                                                     style={{ width: `${Math.min(((alerts.outOfStock + alerts.lowStock) / (stockData.length || 1)) * 100, 100)}%` }}
                                                 ></div>
                                             </div>
@@ -806,24 +793,24 @@ export default function Dashboard() {
                                                 margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
                                             >
                                                 <CartesianGrid horizontal={false} stroke="#e5e7eb" strokeDasharray="3 3" />
-                                                <XAxis 
-                                                    type="number" 
-                                                    axisLine={false} 
+                                                <XAxis
+                                                    type="number"
+                                                    axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#6b7280', fontSize: 12 }}
                                                     tickFormatter={(value) => value.toLocaleString()}
                                                 />
-                                                <YAxis 
-                                                    dataKey="name" 
-                                                    type="category" 
+                                                <YAxis
+                                                    dataKey="name"
+                                                    type="category"
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#374151', fontSize: 12, fontWeight: 500 }}
                                                     width={90}
                                                 />
                                                 <RechartsTooltip content={<CustomBarTooltip />} />
-                                                <Bar 
-                                                    dataKey="quantity" 
+                                                <Bar
+                                                    dataKey="quantity"
                                                     layout="vertical"
                                                     radius={[0, 8, 8, 0]}
                                                     barSize={24}
@@ -892,8 +879,8 @@ export default function Dashboard() {
                                                     ))}
                                                 </Pie>
                                                 <RechartsTooltip content={<CustomPieTooltip />} />
-                                                <Legend 
-                                                    verticalAlign="bottom" 
+                                                <Legend
+                                                    verticalAlign="bottom"
                                                     height={36}
                                                     formatter={(_, entry: any) => (
                                                         <span style={{ color: '#374151', fontSize: '12px', fontWeight: 500 }}>
@@ -955,49 +942,49 @@ export default function Dashboard() {
                                                 margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
                                             >
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                                <XAxis 
-                                                    dataKey="month" 
+                                                <XAxis
+                                                    dataKey="month"
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#6b7280', fontSize: 12 }}
                                                 />
-                                                <YAxis 
+                                                <YAxis
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#6b7280', fontSize: 12 }}
                                                     tickFormatter={(value) => value.toLocaleString()}
                                                 />
-                                                <RechartsTooltip 
-                                                    contentStyle={{ 
-                                                        borderRadius: '8px', 
+                                                <RechartsTooltip
+                                                    contentStyle={{
+                                                        borderRadius: '8px',
                                                         border: '2px solid #e5e7eb',
                                                         backgroundColor: 'white'
                                                     }}
                                                 />
-                                                <Area 
-                                                    type="monotone" 
-                                                    dataKey="indents" 
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="indents"
                                                     stackId="1"
-                                                    stroke="#3b82f6" 
-                                                    fill="#3b82f6" 
+                                                    stroke="#3b82f6"
+                                                    fill="#3b82f6"
                                                     fillOpacity={0.2}
                                                     strokeWidth={2}
                                                 />
-                                                <Area 
-                                                    type="monotone" 
-                                                    dataKey="purchases" 
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="purchases"
                                                     stackId="1"
-                                                    stroke="#10b981" 
-                                                    fill="#10b981" 
+                                                    stroke="#10b981"
+                                                    fill="#10b981"
                                                     fillOpacity={0.2}
                                                     strokeWidth={2}
                                                 />
-                                                <Area 
-                                                    type="monotone" 
-                                                    dataKey="issues" 
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="issues"
                                                     stackId="1"
-                                                    stroke="#8b5cf6" 
-                                                    fill="#8b5cf6" 
+                                                    stroke="#8b5cf6"
+                                                    fill="#8b5cf6"
                                                     fillOpacity={0.2}
                                                     strokeWidth={2}
                                                 />
@@ -1054,8 +1041,8 @@ export default function Dashboard() {
                                                 margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                                             >
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                                <XAxis 
-                                                    dataKey="name" 
+                                                <XAxis
+                                                    dataKey="name"
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#6b7280', fontSize: 11 }}
@@ -1063,15 +1050,15 @@ export default function Dashboard() {
                                                     textAnchor="end"
                                                     height={60}
                                                 />
-                                                <YAxis 
+                                                <YAxis
                                                     axisLine={false}
                                                     tickLine={false}
                                                     tick={{ fill: '#6b7280', fontSize: 12 }}
                                                     tickFormatter={(value) => value.toLocaleString()}
                                                 />
-                                                <RechartsTooltip 
-                                                    contentStyle={{ 
-                                                        borderRadius: '8px', 
+                                                <RechartsTooltip
+                                                    contentStyle={{
+                                                        borderRadius: '8px',
                                                         border: '2px solid #e5e7eb',
                                                         backgroundColor: 'white'
                                                     }}
@@ -1080,14 +1067,14 @@ export default function Dashboard() {
                                                         name === 'quantity' ? 'Quantity' : 'Value'
                                                     ]}
                                                 />
-                                                <Bar 
-                                                    dataKey="value" 
+                                                <Bar
+                                                    dataKey="value"
                                                     radius={[4, 4, 0, 0]}
                                                     barSize={30}
                                                 >
                                                     {stockData.map((entry, index) => (
-                                                        <Cell 
-                                                            key={`cell-${index}`} 
+                                                        <Cell
+                                                            key={`cell-${index}`}
                                                             fill={entry.status === 'red' ? '#ef4444' : entry.status === 'yellow' ? '#f59e0b' : '#10b981'}
                                                         />
                                                     ))}
@@ -1141,11 +1128,10 @@ export default function Dashboard() {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-600">Completion Rate</span>
-                                        <span className={`font-bold ${
-                                            completionRate >= 80 ? 'text-green-600' :
-                                            completionRate >= 50 ? 'text-amber-600' :
-                                            'text-red-600'
-                                        }`}>
+                                        <span className={`font-bold ${completionRate >= 80 ? 'text-green-600' :
+                                                completionRate >= 50 ? 'text-amber-600' :
+                                                    'text-red-600'
+                                            }`}>
                                             {completionRate}%
                                         </span>
                                     </div>
@@ -1163,7 +1149,7 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="space-y-4">
                                 <h3 className="font-semibold text-gray-700 flex items-center gap-2">
                                     <Truck size={18} />
@@ -1172,9 +1158,8 @@ export default function Dashboard() {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-600">Purchase Rate</span>
-                                        <span className={`font-bold ${
-                                            purchase.count > 0 ? 'text-green-600' : 'text-red-600'
-                                        }`}>
+                                        <span className={`font-bold ${purchase.count > 0 ? 'text-green-600' : 'text-red-600'
+                                            }`}>
                                             {indent.count > 0 ? `${Math.round((purchase.count / indent.count) * 100)}%` : '0%'}
                                         </span>
                                     </div>
@@ -1192,7 +1177,7 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="space-y-4">
                                 <h3 className="font-semibold text-gray-700 flex items-center gap-2">
                                     <Warehouse size={18} />
@@ -1201,9 +1186,8 @@ export default function Dashboard() {
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-600">Issue Rate</span>
-                                        <span className={`font-bold ${
-                                            out.count > 0 ? 'text-green-600' : 'text-red-600'
-                                        }`}>
+                                        <span className={`font-bold ${out.count > 0 ? 'text-green-600' : 'text-red-600'
+                                            }`}>
                                             {purchase.count > 0 ? `${Math.round((out.count / purchase.count) * 100)}%` : '0%'}
                                         </span>
                                     </div>

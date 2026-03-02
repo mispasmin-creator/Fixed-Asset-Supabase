@@ -1,4 +1,5 @@
 import { useSheets } from '@/context/SheetsContext';
+import { postToSheet } from '@/lib/fetchers';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useEffect, useState, useMemo } from 'react';
 import DataTable from '../element/DataTable';
@@ -10,29 +11,28 @@ import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 interface MakePaymentData {
+    piNo: string;
     indentNo: string;
     partyName: string;
     productName: string;
     qty: number;
     piAmount: number;
-    piCopy: string;
     poRateWithoutTax: number;
     poNumber: string;
     deliveryDate: string;
     paymentTerms: string;
     internalCode: string;
     totalPoAmount: number;
-    poCopy: string;
     numberOfDays: number;
     totalPaidAmount: number;
     outstandingAmount: number;
     status: string;
-    status1?: string;
     planned: string;
     actual: string;
     delay: string;
     paymentFormLink: string;
     firmNameMatch: string;
+    piCopy?: string;
     rowIndex?: number;
     sheetName?: string;
 }
@@ -45,14 +45,12 @@ interface PIApprovalItem {
     productName?: string;
     qty?: number;
     piAmount?: number;
-    piCopy?: string;
     poRateWithoutTax?: number;
     poNumber?: string;
     deliveryDate?: string;
     paymentTerms?: string;
     internalCode?: string;
     totalPoAmount?: number;
-    poCopy?: string;
     numberOfDays?: number;
     totalPaidAmount?: number;
     outstandingAmount?: number;
@@ -62,6 +60,7 @@ interface PIApprovalItem {
     delay?: string;
     paymentForm?: string;
     firmNameMatch?: string;
+    piCopy?: string;
     rowIndex?: number;
     sheetName?: string;
 }
@@ -97,32 +96,14 @@ const formatDate = (dateString: string): string => {
     if (!dateString || dateString.trim() === '' || dateString === 'N/A' || dateString === 'null' || dateString === 'undefined') {
         return 'N/A';
     }
-    
+
     try {
-        // Remove any whitespace
         const cleanDate = dateString.toString().trim();
-        
-        // Check if it's already in DD/MM/YYYY format
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanDate)) {
-            return cleanDate;
-        }
-        
-        // Check if it's in YYYY-MM-DD format (from Google Sheets)
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanDate)) return cleanDate;
         if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
             const [year, month, day] = cleanDate.split('-');
             return `${day}/${month}/${year}`;
         }
-        
-        // Check if it's in MM/DD/YYYY format
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanDate)) {
-            const parts = cleanDate.split('/');
-            if (parts.length === 3) {
-                const [month, day, year] = parts;
-                return `${day}/${month}/${year}`;
-            }
-        }
-        
-        // Try parsing as Date object (for ISO string or other formats)
         const date = new Date(cleanDate);
         if (!isNaN(date.getTime())) {
             const day = date.getDate().toString().padStart(2, '0');
@@ -130,17 +111,38 @@ const formatDate = (dateString: string): string => {
             const year = date.getFullYear();
             return `${day}/${month}/${year}`;
         }
-        
-        // Return original if can't parse
         return cleanDate;
     } catch (error) {
-        console.error('Error formatting date:', dateString, error);
+        return dateString;
+    }
+};
+
+const formatDateTime = (dateString: string): string => {
+    if (!dateString || dateString.trim() === '' || dateString === 'N/A' || dateString === 'null' || dateString === 'undefined') {
+        return 'N/A';
+    }
+
+    try {
+        const cleanDate = dateString.toString().trim();
+        const date = new Date(cleanDate);
+        if (!isNaN(date.getTime())) {
+            return date.toLocaleString('en-IN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+        return cleanDate;
+    } catch (error) {
         return dateString;
     }
 };
 
 export default function MakePayment() {
-    const { piApprovalSheet, paymentHistorySheet, updateSheet } = useSheets();
+    const { piApprovalSheet, paymentHistorySheet, updateSheet, updateAll } = useSheets();
     const [tableData, setTableData] = useState<MakePaymentData[]>([]);
     const [historyData, setHistoryData] = useState<DisplayPaymentHistory[]>([]);
     const { user } = useAuth();
@@ -159,22 +161,12 @@ export default function MakePayment() {
 
     // Debug: Check if updateSheet function exists
     useEffect(() => {
-        console.log('DEBUG - Available functions:', {
-            updateSheetExists: !!updateSheet,
-            updateSheetType: typeof updateSheet,
-            piApprovalSheetLength: Array.isArray(piApprovalSheet) ? piApprovalSheet.length : 0,
-            paymentHistorySheetLength: Array.isArray(paymentHistorySheet) ? paymentHistorySheet.length : 0,
-        });
+        // updateSheet logic validated
     }, [updateSheet, piApprovalSheet, paymentHistorySheet]);
 
     // Filter data from PI APPROVAL sheet
     useEffect(() => {
-        console.log('PI APPROVAL Sheet Data:', piApprovalSheet);
-        console.log('Payment History Sheet Data:', paymentHistorySheet);
-        console.log('User Firm:', user.firmNameMatch);
-
         if (!piApprovalSheet || !Array.isArray(piApprovalSheet)) {
-            console.log('PI APPROVAL sheet is empty or not an array');
             setTableData([]);
             setLoading(false);
             return;
@@ -186,11 +178,9 @@ export default function MakePayment() {
             return user.firmNameMatch.toLowerCase() === "all" || firmMatch === user.firmNameMatch;
         });
 
-        console.log('Filtered by firm:', filteredByFirm.length);
-
         // Create a Set of paid indent numbers from Payment History
         const paidIndentNumbers = new Set();
-        
+
         if (paymentHistorySheet && Array.isArray(paymentHistorySheet)) {
             paymentHistorySheet.forEach((item: PaymentHistoryItem) => {
                 if (item.uniqueNumber) {
@@ -198,40 +188,29 @@ export default function MakePayment() {
                 }
             });
         }
-        
-        console.log('Paid indent numbers from Payment History:', Array.from(paidIndentNumbers));
 
         // Process PI APPROVAL data
         const processedData = filteredByFirm
             .filter((sheet: PIApprovalItem) => {
                 const indentNumber = sheet.indentNo?.toString().trim() || '';
-                
+
                 // Check if indent number exists and is not already paid
                 const isAlreadyPaid = indentNumber ? paidIndentNumbers.has(indentNumber) : false;
-                
+
                 // Check Planned and Actual conditions from PI APPROVAL sheet
                 const plannedValue = sheet.planned?.toString().trim() || '';
                 const actualValue = sheet.actual?.toString().trim() || '';
-                
+
                 const hasPlanned = plannedValue !== '' && plannedValue !== 'N/A' && plannedValue !== 'null' && plannedValue !== 'undefined';
                 const hasActual = actualValue !== '' && actualValue !== 'N/A' && actualValue !== 'null' && actualValue !== 'undefined';
-                
+
                 // Check if payment form exists
-                const hasPaymentForm = sheet.paymentForm?.toString().trim() !== '' && 
-                                      sheet.paymentForm?.toString().trim() !== 'N/A';
-                
-                const shouldShow = !isAlreadyPaid && hasPlanned && !hasActual && hasPaymentForm;
-                
-                console.log(`Indent ${indentNumber}:`, {
-                    isAlreadyPaid,
-                    planned: plannedValue,
-                    actual: actualValue,
-                    hasPlanned,
-                    hasActual,
-                    hasPaymentForm,
-                    shouldShow
-                });
-                
+                const hasPaymentForm = sheet.paymentForm?.toString().trim() !== '' &&
+                    sheet.paymentForm?.toString().trim() !== 'N/A';
+
+                const isApproved = sheet.status?.toLowerCase() === 'approved';
+                const shouldShow = !isAlreadyPaid && (isApproved || (hasPlanned && hasPaymentForm)) && !hasActual;
+
                 return shouldShow;
             })
             .map((sheet: PIApprovalItem) => {
@@ -239,21 +218,20 @@ export default function MakePayment() {
                 const formattedDeliveryDate = formatDate(sheet.deliveryDate || '');
                 const formattedPlannedDate = formatDate(sheet.planned || '');
                 const formattedActualDate = formatDate(sheet.actual || '');
-                
+
                 return {
+                    piNo: sheet.piNo?.toString().trim() || '',
                     indentNo: sheet.indentNo?.toString().trim() || '',
                     partyName: sheet.partyName?.toString().trim() || '',
                     productName: sheet.productName?.toString().trim() || '',
                     qty: Number(sheet.qty) || 0,
                     piAmount: Number(sheet.piAmount) || 0,
-                    piCopy: sheet.piCopy?.toString().trim() || '',
                     poRateWithoutTax: Number(sheet.poRateWithoutTax) || 0,
                     poNumber: sheet.poNumber?.toString().trim() || '',
                     deliveryDate: formattedDeliveryDate,
                     paymentTerms: sheet.paymentTerms?.toString().trim() || '',
                     internalCode: sheet.internalCode?.toString().trim() || '',
                     totalPoAmount: Number(sheet.totalPoAmount) || 0,
-                    poCopy: sheet.poCopy?.toString().trim() || '',
                     numberOfDays: Number(sheet.numberOfDays) || 0,
                     totalPaidAmount: Number(sheet.totalPaidAmount) || 0,
                     outstandingAmount: Number(sheet.outstandingAmount) || 0,
@@ -263,15 +241,13 @@ export default function MakePayment() {
                     delay: sheet.delay?.toString().trim() || '',
                     paymentFormLink: sheet.paymentForm?.toString().trim() || '',
                     firmNameMatch: sheet.firmNameMatch?.toString().trim() || '',
+                    piCopy: sheet.piCopy,
                     rowIndex: sheet.rowIndex,
                     sheetName: sheet.sheetName || 'PI APPROVAL',
                 } as MakePaymentData;
             })
             .sort((a, b) => b.indentNo.localeCompare(a.indentNo));
 
-        console.log('Final processed table data:', processedData);
-        console.log('Number of items to display:', processedData.length);
-        
         setTableData(processedData);
 
         // Calculate stats
@@ -295,13 +271,10 @@ export default function MakePayment() {
     // Load Payment History data
     useEffect(() => {
         if (!paymentHistorySheet || !Array.isArray(paymentHistorySheet)) {
-            console.log('Payment History sheet is empty or not an array');
             setHistoryData([]);
             setHistoryLoading(false);
             return;
         }
-
-        console.log('Processing Payment History data:', paymentHistorySheet.length, 'items');
 
         // Process Payment History data
         const processedHistoryData = paymentHistorySheet
@@ -311,7 +284,7 @@ export default function MakePayment() {
             })
             .map((item: PaymentHistoryItem, index) => {
                 const originalTimestamp = item.timestamp?.toString().trim() || '';
-                 const formattedTimestamp = originalTimestamp ? formatDate(originalTimestamp) : '';
+                const formattedTimestamp = originalTimestamp ? formatDateTime(originalTimestamp) : '';
 
                 return {
                     rowIndex: item.rowIndex || index,
@@ -330,8 +303,6 @@ export default function MakePayment() {
             })
             .sort((a, b) => b.formattedTimestamp.localeCompare(a.formattedTimestamp));
 
-        console.log('Processed Payment History data:', processedHistoryData.length, 'items');
-        
         setHistoryData(processedHistoryData);
         setStats(prev => ({
             ...prev,
@@ -346,7 +317,7 @@ export default function MakePayment() {
             alert("No payment link available for this item.");
             return;
         }
-        
+
         window.open(item.paymentFormLink, '_blank');
     };
 
@@ -358,43 +329,74 @@ export default function MakePayment() {
         }
 
         setIsUpdating("bulk");
-        
+
         try {
             const today = new Date();
-            const day = today.getDate().toString().padStart(2, '0');
-            const month = (today.getMonth() + 1).toString().padStart(2, '0');
-            const year = today.getFullYear();
-            const currentDate = `${day}/${month}/${year}`;
-            
+            const currentDate = today.toISOString();
+
             const selectedData = tableData.filter(item => selectedItems.has(item.indentNo));
             let successCount = 0;
             let errorCount = 0;
-            
+
             for (const item of selectedData) {
                 try {
                     const updateData = {
                         actual: currentDate,
-                        status1: "ok"
+                        status: "Paid"
                     };
 
-                    console.log('Updating PI APPROVAL sheet row:', {
-                        sheetName: 'PI APPROVAL',
-                        rowIndex: item.rowIndex,
-                        indentNo: item.indentNo,
-                        updateData
-                    });
-
-                    if (!updateSheet || !item.rowIndex || item.rowIndex < 7) {
+                    if (!updateSheet || !item.rowIndex || item.rowIndex < 1) {
                         console.error('Invalid update for item:', item.indentNo);
                         errorCount++;
                         continue;
                     }
 
                     const result = await updateSheet('PI APPROVAL', item.rowIndex, updateData);
-                    
+
                     if (result && result.success) {
+                        // Also insert into Payment History (payments table)
+                        const paymentHistoryEntry = {
+                            timestamp: currentDate,
+                            apPaymentNumber: `PAY-${Date.now()}-${successCount}`,
+                            status: 'Paid',
+                            uniqueNumber: item.indentNo || item.poNumber,
+                            fmsName: item.firmNameMatch,
+                            payTo: item.partyName,
+                            amountToBePaid: item.piAmount,
+                            remarks: `Payment for Indent: ${item.indentNo}, PO: ${item.poNumber}`,
+                            anyAttachments: ''
+                        };
+
+                        await postToSheet([paymentHistoryEntry], 'insert', 'Payment History');
+
+                        // Helper to re-format date from DD/MM/YYYY to YYYY-MM-DD for Supabase
+                        let mappedDeliveryDate = null;
+                        if (item.deliveryDate && item.deliveryDate.includes('/')) {
+                            const p = item.deliveryDate.split('/');
+                            if (p.length === 3) mappedDeliveryDate = `${p[2]}-${p[1]}-${p[0]}`;
+                        }
+
+                        // ✅ NEW: Insert into Tally Entry (moving trigger logic to frontend)
+                        const tallyEntryData = {
+                            indentNumber: item.indentNo,
+                            poNumber: item.poNumber,
+                            partyName: item.partyName,
+                            billAmt: item.piAmount,
+                            planned1: currentDate.split('T')[0], // Stage 1 (Audit Data) planned date
+                            firmNameMatch: item.firmNameMatch,
+                            productName: item.productName,
+                            qty: item.qty,
+
+                            // Fill other details from PI Approval
+                            billNo: item.piNo,
+                            rate: item.poRateWithoutTax,
+                            totalRate: item.totalPoAmount,
+                            materialInDate: mappedDeliveryDate
+                        };
+                        await postToSheet([tallyEntryData], 'insert', 'TALLY ENTRY');
+
                         successCount++;
-                        
+
                         if (item.paymentFormLink && item.paymentFormLink !== 'N/A') {
                             window.open(item.paymentFormLink, '_blank');
                         }
@@ -407,16 +409,19 @@ export default function MakePayment() {
                     errorCount++;
                 }
             }
-            
+
+            // Refresh all sheets to update history and pending lists
+            updateAll();
+
             setSelectedItems(new Set());
-            
+
             if (successCount > 0) {
                 const updatedIndentNos = selectedData
                     .filter((_, index) => index < successCount)
                     .map(item => item.indentNo);
-                
+
                 setTableData(prev => prev.filter(data => !updatedIndentNos.includes(data.indentNo)));
-                
+
                 updatedIndentNos.forEach(indentNo => {
                     const item = selectedData.find(d => d.indentNo === indentNo);
                     if (item) {
@@ -430,9 +435,9 @@ export default function MakePayment() {
                     }
                 });
             }
-            
+
             alert(`✅ ${successCount} payment(s) updated successfully!${errorCount > 0 ? ` ${errorCount} failed.` : ''}${successCount > 0 ? ' Payment forms opened in new tabs.' : ''}`);
-            
+
         } catch (error: any) {
             console.error('Error in bulk submission:', error);
             alert(`❌ Failed to process payments: ${error.message || 'Unknown error'}`);
@@ -470,7 +475,7 @@ export default function MakePayment() {
             alert(`No ${type} copy available`);
             return;
         }
-        
+
         if (url.startsWith('http') || url.startsWith('https')) {
             window.open(url, '_blank');
         } else {
@@ -524,8 +529,8 @@ export default function MakePayment() {
                 );
             },
         },
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <div className="flex flex-col">
@@ -536,8 +541,8 @@ export default function MakePayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -546,22 +551,22 @@ export default function MakePayment() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'partyName', 
+        {
+            accessorKey: 'partyName',
             header: 'Party Name',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.partyName}</span>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Quantity',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -577,61 +582,43 @@ export default function MakePayment() {
             ),
         },
         {
+            accessorKey: 'piCopy',
+            header: 'PI Copy',
+            cell: ({ row }) => (
+                <div className="flex justify-center">
+                    {row.original.piCopy ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => handleFileLinkClick(row.original.piCopy!, 'PI')}
+                        >
+                            <FileText className="mr-2 h-4 w-4" />
+                            View PI
+                        </Button>
+                    ) : (
+                        <span className="text-gray-400">N/A</span>
+                    )}
+                </div>
+            )
+        },
+        {
             accessorKey: 'totalPoAmount',
             header: 'Total PO Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.totalPoAmount?.toLocaleString('en-IN')}</span>
             ),
         },
-        { 
-            accessorKey: 'outstandingAmount', 
+        {
+            accessorKey: 'outstandingAmount',
             header: 'Outstanding',
             cell: ({ row }) => (
                 <span className="font-semibold text-red-600">₹{row.original.outstandingAmount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'piCopy', 
-            header: 'P.I Copy',
-            cell: ({ row }) => {
-                const piCopy = row.original.piCopy;
-                return piCopy && piCopy !== 'N/A' && piCopy !== '' ? (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleFileLinkClick(piCopy, 'PI')}
-                        className="h-8 px-2 text-blue-600 hover:text-blue-800"
-                    >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        View PI
-                    </Button>
-                ) : (
-                    <span className="text-gray-400 text-sm">N/A</span>
-                );
-            }
-        },
-        { 
-            accessorKey: 'poCopy', 
-            header: 'PO Copy',
-            cell: ({ row }) => {
-                const poCopy = row.original.poCopy;
-                return poCopy && poCopy !== 'N/A' && poCopy !== '' ? (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleFileLinkClick(poCopy, 'PO')}
-                        className="h-8 px-2 text-green-600 hover:text-green-800"
-                    >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        View PO
-                    </Button>
-                ) : (
-                    <span className="text-gray-400 text-sm">N/A</span>
-                );
-            }
-        },
-        { 
-            accessorKey: 'paymentTerms', 
+
+        {
+            accessorKey: 'paymentTerms',
             header: 'Payment Terms',
             cell: ({ row }) => {
                 const type = row.original.paymentTerms;
@@ -643,8 +630,8 @@ export default function MakePayment() {
                 );
             }
         },
-        { 
-            accessorKey: 'deliveryDate', 
+        {
+            accessorKey: 'deliveryDate',
             header: 'Delivery Date',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -653,8 +640,8 @@ export default function MakePayment() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'planned', 
+        {
+            accessorKey: 'planned',
             header: 'Planned Date',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -663,22 +650,22 @@ export default function MakePayment() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'poNumber', 
+        {
+            accessorKey: 'poNumber',
             header: 'PO Number',
             cell: ({ row }) => (
                 <span className="font-medium text-blue-600">{row.original.poNumber || 'N/A'}</span>
             )
         },
-        { 
-            accessorKey: 'internalCode', 
+        {
+            accessorKey: 'internalCode',
             header: 'Internal Code',
             cell: ({ row }) => (
                 <span className="font-medium text-gray-700">{row.original.internalCode || 'N/A'}</span>
             )
         },
-        { 
-            accessorKey: 'status', 
+        {
+            accessorKey: 'status',
             header: 'Status',
             cell: ({ row }) => {
                 const status = row.original.status;
@@ -695,15 +682,15 @@ export default function MakePayment() {
     // Table columns for payment history
     const historyColumns: ColumnDef<DisplayPaymentHistory>[] = [
         {
-        accessorKey: 'formattedTimestamp', // Change from 'timestamp' to 'formattedTimestamp'
+            accessorKey: 'formattedTimestamp', // Change from 'timestamp' to 'formattedTimestamp'
             header: 'Timestamp',
             cell: ({ row }) => (
                 <div className="text-sm text-gray-600">
-                {row.original.formattedTimestamp || '-'}
+                    {row.original.formattedTimestamp || '-'}
                 </div>
             )
         },
-        
+
         {
             accessorKey: 'uniqueNumber',
             header: 'Unique Number',
@@ -799,7 +786,7 @@ export default function MakePayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -811,7 +798,7 @@ export default function MakePayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -823,7 +810,7 @@ export default function MakePayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -835,7 +822,7 @@ export default function MakePayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -1008,7 +995,7 @@ export default function MakePayment() {
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         <DataTable<DisplayPaymentHistory, ColumnDef<DisplayPaymentHistory>>
                                             data={historyData}
                                             columns={historyColumns}

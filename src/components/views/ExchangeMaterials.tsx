@@ -116,346 +116,377 @@ export default function PIApprovals() {
     const [pendingData, setPendingData] = useState<PIPendingData[]>([]);
     const [selectedItem, setSelectedItem] = useState<PIPendingData | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
-    const [uploadingFile, setUploadingFile] = useState(false);
-    
+    const [submitting, setSubmitting] = useState(false);
     const [stats, setStats] = useState({
         total: 0,
         totalAmount: 0,
         pendingCount: 0
     });
 
+    const formatDateTime = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            const time = date.toLocaleString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            return `${d}/${m}/${y} ${time}`;
+        } catch {
+            return isoString;
+        }
+    };
+
+    const formatDateTiny = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            return `${d}/${m}/${y}`;
+        } catch {
+            return isoString;
+        }
+    };
+
 
     const groupItemsByPO = (items: PIPendingData[]): GroupedPIPendingData[] => {
-    const grouped: Record<string, GroupedPIPendingData> = {};
-    
-    items.forEach(item => {
-        const poNumber = item.poNumber || '';
-        
-        if (!grouped[poNumber]) {
-            grouped[poNumber] = {
-                poNumber: poNumber,
-                partyName: item.partyName || '',
-                firmNameMatch: item.firmNameMatch || '',
-                totalPoAmount: 0,
-                paymentTerms: item.paymentTerms || '',
-                itemCount: 0,
-                firstItem: item
-            };
-        }
-        
-        // Increment item count and sum amount
-        grouped[poNumber].itemCount++;
-        grouped[poNumber].totalPoAmount += item.totalPoAmount || 0;
-    });
-    
-    return Object.values(grouped);
-};
+        const grouped: Record<string, GroupedPIPendingData> = {};
 
-   useEffect(() => {
-    try {
-        const safePoMasterSheet: POMasterRecord[] = Array.isArray(poMasterSheet) ? poMasterSheet : [];
-        
-        // Filter by firm
-        const filteredByFirm = safePoMasterSheet.filter((sheet: POMasterRecord) =>
-            user?.firmNameMatch?.toLowerCase() === "all" ||
-            sheet?.firmNameMatch === user?.firmNameMatch
-        );
+        items.forEach(item => {
+            const poNumber = item.poNumber || '';
 
-        // Filter items that are NOT in PI Approval sheet yet
-        const approvedPONumbers = new Set(
-            (piApprovalSheet || []).map(pi => pi.piNo)
-        );
+            if (!grouped[poNumber]) {
+                grouped[poNumber] = {
+                    poNumber: poNumber,
+                    partyName: item.partyName || '',
+                    firmNameMatch: item.firmNameMatch || '',
+                    totalPoAmount: 0,
+                    paymentTerms: item.paymentTerms || '',
+                    itemCount: 0,
+                    firstItem: item
+                };
+            }
 
-        const pendingItems = filteredByFirm
-            .filter((sheet: POMasterRecord) => 
-                !approvedPONumbers.has(sheet?.poNumber || '')
-            )
-            .map((sheet: POMasterRecord) => ({
-                rowIndex: sheet?.rowIndex || 0,
-                timestamp: sheet?.timestamp || '',
-                partyName: sheet?.partyName || '',
-                poNumber: sheet?.poNumber || '',
-                internalCode: sheet?.internalCode || '',
-                product: sheet?.product || '',
-                description: sheet?.description || '',
-                quantity: Number(sheet?.quantity || 0),
-                unit: sheet?.unit || '',
-                rate: Number(sheet?.rate || 0),
-                gstPercent: Number(sheet?.gstPercent || 0),
-                discountPercent: Number(sheet?.discountPercent || 0),
-                amount: Number(sheet?.amount || 0),
-                totalPoAmount: Number(sheet?.totalPoAmount || 0),
-                deliveryDate: sheet?.deliveryDate || '',
-                paymentTerms: sheet?.paymentTerms || '',
-                firmNameMatch: sheet?.firmNameMatch || '',
-                totalPaidAmount: Number(sheet?.totalPaidAmount || 0),
-                outstandingAmount: Number(sheet?.outstandingAmount || 0),
-                status: sheet?.status || 'Pending',
-            }))
-            .filter(item => {
-                const status = item.status?.toLowerCase() || '';
-                return status === 'pending' || status === '';
+            // Increment item count and sum amount
+            grouped[poNumber].itemCount++;
+            grouped[poNumber].totalPoAmount += item.totalPoAmount || 0;
+        });
+
+        return Object.values(grouped);
+    };
+
+    useEffect(() => {
+        try {
+            const safePoMasterSheet: POMasterRecord[] = Array.isArray(poMasterSheet) ? poMasterSheet : [];
+
+            // Filter by firm
+            const filteredByFirm = safePoMasterSheet.filter((sheet: POMasterRecord) =>
+                user?.firmNameMatch?.toLowerCase() === "all" ||
+                sheet?.firmNameMatch === user?.firmNameMatch
+            );
+
+            // Filter items that are NOT in PI Approval sheet yet
+            // Check by both PO Number and Indent Number (internalCode)
+            const approvedPONumbers = new Set(
+                (piApprovalSheet || []).map(pi => pi.poNumber?.toString().trim()).filter(Boolean)
+            );
+            const approvedIndentNumbers = new Set(
+                (piApprovalSheet || []).map(pi => pi.indentNo?.toString().trim()).filter(Boolean)
+            );
+
+            const pendingItems = filteredByFirm
+                .filter((sheet: POMasterRecord) => {
+                    const poNo = sheet?.poNumber?.toString().trim() || '';
+                    const indentNo = sheet?.internalCode?.toString().trim() || '';
+                    return !approvedPONumbers.has(poNo) && !approvedIndentNumbers.has(indentNo);
+                })
+                .map((sheet: POMasterRecord) => ({
+                    rowIndex: sheet?.rowIndex || 0,
+                    timestamp: sheet?.timestamp || '',
+                    partyName: sheet?.partyName || '',
+                    poNumber: sheet?.poNumber || '',
+                    internalCode: sheet?.internalCode || '',
+                    product: sheet?.product || '',
+                    description: sheet?.description || '',
+                    quantity: Number(sheet?.quantity || 0),
+                    unit: sheet?.unit || '',
+                    rate: Number(sheet?.rate || 0),
+                    gstPercent: Number(sheet?.gstPercent || 0),
+                    discountPercent: Number(sheet?.discountPercent || 0),
+                    amount: Number(sheet?.amount || 0),
+                    totalPoAmount: Number(sheet?.totalPoAmount || 0),
+                    deliveryDate: sheet?.deliveryDate || '',
+                    paymentTerms: sheet?.paymentTerms || '',
+                    firmNameMatch: sheet?.firmNameMatch || '',
+                    totalPaidAmount: Number(sheet?.totalPaidAmount || 0),
+                    outstandingAmount: Number(sheet?.outstandingAmount || 0),
+                    status: sheet?.status || 'Pending',
+                }))
+                .filter(item => {
+                    const status = item.status?.toLowerCase() || '';
+                    return status === 'pending' || status === '';
+                });
+
+            // ✅ NEW LOGIC: Group all items by Indent Number (internalCode) to show only the latest revised PO for each indent
+            const finalItems: PIPendingData[] = [];
+            const indentGroups: Record<string, PIPendingData[]> = {};
+            const standaloneItems: PIPendingData[] = [];
+
+            pendingItems.forEach(item => {
+                const indent = item.internalCode?.trim();
+                if (indent) {
+                    if (!indentGroups[indent]) {
+                        indentGroups[indent] = [];
+                    }
+                    indentGroups[indent].push(item);
+                } else {
+                    standaloneItems.push(item);
+                }
             });
 
-        // ✅ NEW LOGIC: Handle different PO patterns
-        const finalItems: PIPendingData[] = [];
-        
-        // Separate items by pattern
-        const storeNumberItems: Record<string, PIPendingData[]> = {}; // STORE-1, STORE-2 pattern
-        const storePONumberItems: PIPendingData[] = []; // STORE-PO-25-26-n pattern
-        const otherItems: PIPendingData[] = []; // Other patterns
-        
-        pendingItems.forEach(item => {
-            const po = item.poNumber;
-            
-            // Pattern 1: STORE-1, STORE-2 (group by indent)
-            if (po.match(/^STORE-\d+$/)) {
-                const indent = item.internalCode;
-                if (!storeNumberItems[indent]) {
-                    storeNumberItems[indent] = [];
+            // Process items with an indent: Take only the latest PO (most recent revision)
+            Object.keys(indentGroups).forEach(indent => {
+                const group = indentGroups[indent];
+                if (group.length > 0) {
+                    const sortedGroup = [...group].sort((a, b) => {
+                        const dateA = new Date(a.timestamp || 0).getTime();
+                        const dateB = new Date(b.timestamp || 0).getTime();
+                        if (!isNaN(dateA) && !isNaN(dateB)) {
+                            return dateB - dateA;
+                        }
+                        return (b.rowIndex || 0) - (a.rowIndex || 0);
+                    });
+                    finalItems.push(sortedGroup[0]);
                 }
-                storeNumberItems[indent].push(item);
-            }
-            // Pattern 2: STORE-PO-25-26-n (deduplicate by PO number)
-            else if (po.match(/^STORE-PO-25-26-\d+$/)) {
-                storePONumberItems.push(item);
-            }
-            // Pattern 3: Others (deduplicate by PO number)
-            else {
-                otherItems.push(item);
-            }
-        });
-        
-        // ✅ Process STORE-1, STORE-2 pattern: Latest for each indent
-        Object.keys(storeNumberItems).forEach(indent => {
-            const group = storeNumberItems[indent];
-            if (group.length > 0) {
-                // Sort by PO number to get latest (STORE-2 > STORE-1)
-                const sortedGroup = [...group].sort((a, b) => {
-                    const getNumber = (po: string) => parseInt(po.replace('STORE-', ''));
-                    return getNumber(b.poNumber) - getNumber(a.poNumber);
-                });
-                // Take the latest one
-                finalItems.push(sortedGroup[0]);
-            }
-        });
-        
-        // ✅ Process STORE-PO-25-26-n pattern: Unique PO numbers only
-        const seenStorePONumbers = new Set<string>();
-        storePONumberItems.forEach(item => {
-            if (!seenStorePONumbers.has(item.poNumber)) {
-                seenStorePONumbers.add(item.poNumber);
-                finalItems.push(item);
-            }
-        });
-        
-        // ✅ Process other patterns: Unique PO numbers only
-        const seenOtherPONumbers = new Set<string>();
-        otherItems.forEach(item => {
-            if (!seenOtherPONumbers.has(item.poNumber)) {
-                seenOtherPONumbers.add(item.poNumber);
-                finalItems.push(item);
-            }
-        });
-        
-        // Sort all items by timestamp (newest first)
-        const finalSortedItems = finalItems.sort((a, b) => {
-            if (a.timestamp && b.timestamp) {
-                const dateA = new Date(a.timestamp);
-                const dateB = new Date(b.timestamp);
-                if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
-                    return dateB.getTime() - dateA.getTime();
-                }
-            }
-            return (b.rowIndex || 0) - (a.rowIndex || 0);
-        });
-        
-        setPendingData(finalSortedItems);
-        
-        // Calculate stats
-        const totalAmount = finalSortedItems.reduce((sum, item) => sum + item.totalPoAmount, 0);
-        setStats({
-            total: finalSortedItems.length,
-            totalAmount,
-            pendingCount: finalSortedItems.length
-        });
+            });
 
-    } catch (error) {
-        console.error('❌ Error in PI Approvals useEffect:', error);
-        setPendingData([]);
-    }
-}, [poMasterSheet, piApprovalSheet, user?.firmNameMatch]);
+            // Process standalone items (no indent number): Deduplicate by PO number
+            const seenStandalonePOs = new Set<string>();
+            standaloneItems.forEach(item => {
+                if (!seenStandalonePOs.has(item.poNumber)) {
+                    seenStandalonePOs.add(item.poNumber);
+                    finalItems.push(item);
+                }
+            });
+
+            // Sort all items by timestamp (newest first)
+            const finalSortedItems = finalItems.sort((a, b) => {
+                if (a.timestamp && b.timestamp) {
+                    const dateA = new Date(a.timestamp);
+                    const dateB = new Date(b.timestamp);
+                    if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+                        return dateB.getTime() - dateA.getTime();
+                    }
+                }
+                return (b.rowIndex || 0) - (a.rowIndex || 0);
+            });
+
+            setPendingData(finalSortedItems);
+
+            // Calculate stats
+            const totalAmount = finalSortedItems.reduce((sum, item) => sum + item.totalPoAmount, 0);
+            setStats({
+                total: finalSortedItems.length,
+                totalAmount,
+                pendingCount: finalSortedItems.length
+            });
+
+        } catch (error) {
+            console.error('❌ Error in PI Approvals useEffect:', error);
+            setPendingData([]);
+        }
+    }, [poMasterSheet, piApprovalSheet, user?.firmNameMatch]);
 
 
 
     const pendingColumns: ColumnDef<PIPendingData>[] = [
-    {
-        header: 'Action',
-        cell: ({ row }: { row: Row<PIPendingData> }) => (
-            <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                    setSelectedItem(row.original);
-                    setOpenDialog(true);
-                }}
-                className="bg-purple-600 hover:bg-purple-700 shadow-sm"
-            >
-                <FileText className="mr-2 h-3 w-3" />
-                PI Payment
-            </Button>
-        ),
-    },
-    {
-        accessorKey: 'poNumber',
-        header: 'PO Number',
-        cell: ({ row }) => (
-            <span className="font-medium text-purple-700">{row.original.poNumber || '-'}</span>
-        )
-    },
-     {
-        accessorKey: 'internalCode',
-        header: 'Indent No.',
-        cell: ({ row }) => (
-            <Badge variant="outline" className="bg-gray-50">
-                {row.original.internalCode || '-'}
-            </Badge>
-        )
-    },
-    {
-        accessorKey: 'partyName',
-        header: 'Party Name',
-        cell: ({ row }) => (
-            <span className="font-medium">{row.original.partyName || '-'}</span>
-        )
-    },
-
-  {
-        accessorKey: 'product',
-        header: 'Product Name',
-        cell: ({ row }) => (
-            <div className="max-w-[200px]">
-                <span className="text-sm font-medium text-gray-800">
-                    {row.original.product || '-'}
-                </span>
-                {row.original.description && (
-                    <p className="text-xs text-gray-500 truncate mt-1">
-                        {row.original.description}
-                    </p>
-                )}
-            </div>
-        )
-    },
-   
-    {
-        accessorKey: 'totalPoAmount',
-        header: 'Total PO Amount',
-        cell: ({ row }) => (
-            <span className="font-bold text-purple-600">₹{row.original.totalPoAmount?.toLocaleString('en-IN')}</span>
-        )
-    },
-    // ✅ ADD these three new columns
-    {
-        accessorKey: 'totalPaidAmount',
-        header: 'Total Paid Amount',
-        cell: ({ row }) => (
-            <span className="font-semibold text-green-600">
-                ₹{row.original.totalPaidAmount?.toLocaleString('en-IN')}
-            </span>
-        )
-    },
-    {
-        accessorKey: 'outstandingAmount',
-        header: 'Outstanding Amount',
-        cell: ({ row }) => (
-            <span className="font-semibold text-red-600">
-                ₹{row.original.outstandingAmount?.toLocaleString('en-IN')}
-            </span>
-        )
-    },
-    {
-        accessorKey: 'status',
-        header: 'Status',
-        cell: ({ row }) => {
-            const status = row.original.status;
-            const isPending = status?.toLowerCase() === 'pending';
-            const isComplete = status?.toLowerCase() === 'complete' || status?.toLowerCase() === 'completed';
-            
-            return (
-                <Badge 
-                    variant={isComplete ? "default" : "outline"} 
-                    className={
-                        isComplete 
-                            ? "bg-green-100 text-green-800 border-green-300" 
-                            : isPending 
-                                ? "bg-amber-100 text-amber-800 border-amber-300"
-                                : ""
-                    }
+        {
+            header: 'Action',
+            cell: ({ row }: { row: Row<PIPendingData> }) => (
+                <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                        setSelectedItem(row.original);
+                        setOpenDialog(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 shadow-sm"
                 >
-                    {status || 'Pending'}
+                    <FileText className="mr-2 h-3 w-3" />
+                    PI Payment
+                </Button>
+            ),
+        },
+        {
+            accessorKey: 'timestamp',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <span className="text-sm text-gray-600">{formatDateTime(getValue() as string)}</span>
+            )
+        },
+        {
+            accessorKey: 'poNumber',
+            header: 'PO Number',
+            cell: ({ row }) => (
+                <span className="font-medium text-purple-700">{row.original.poNumber || '-'}</span>
+            )
+        },
+        {
+            accessorKey: 'internalCode',
+            header: 'Indent No.',
+            cell: ({ row }) => (
+                <Badge variant="outline" className="bg-gray-50">
+                    {row.original.internalCode || '-'}
                 </Badge>
-            );
-        }
-    },
-    {
-        accessorKey: 'paymentTerms',
-        header: 'Payment Terms',
-        cell: ({ row }) => {
-            const terms = row.original.paymentTerms;
-            const isAdvance = terms?.toLowerCase().includes('advance');
-            return (
-                <Badge variant={isAdvance ? "default" : "outline"} className={isAdvance ? "bg-amber-100 text-amber-800" : ""}>
-                    {terms || '-'}
-                </Badge>
-            );
-        }
-    },
-    {
-    accessorKey: 'deliveryDate',
-    header: 'Delivery Date',
-    cell: ({ row }) => {
-        const deliveryDate = row.original.deliveryDate;
-        
-        // Check if deliveryDate exists and is a valid date string
-        if (!deliveryDate) return <span className="text-sm">-</span>;
-        
-        try {
-            // Try to parse the date
-            const date = new Date(deliveryDate);
-            
-            // Check if date is valid
-            if (isNaN(date.getTime())) {
-                // If not a valid Date object, return the original string
-                return <span className="text-sm">{deliveryDate}</span>;
+            )
+        },
+        {
+            accessorKey: 'partyName',
+            header: 'Party Name',
+            cell: ({ row }) => (
+                <span className="font-medium">{row.original.partyName || '-'}</span>
+            )
+        },
+
+        {
+            accessorKey: 'product',
+            header: 'Product Name',
+            cell: ({ row }) => (
+                <div className="max-w-[200px]">
+                    <span className="text-sm font-medium text-gray-800">
+                        {row.original.product || '-'}
+                    </span>
+                    {row.original.description && (
+                        <p className="text-xs text-gray-500 truncate mt-1">
+                            {row.original.description}
+                        </p>
+                    )}
+                </div>
+            )
+        },
+
+        {
+            accessorKey: 'totalPoAmount',
+            header: 'Total PO Amount',
+            cell: ({ row }) => (
+                <span className="font-bold text-purple-600">₹{row.original.totalPoAmount?.toLocaleString('en-IN')}</span>
+            )
+        },
+        // ✅ ADD these three new columns
+        {
+            accessorKey: 'totalPaidAmount',
+            header: 'Total Paid Amount',
+            cell: ({ row }) => (
+                <span className="font-semibold text-green-600">
+                    ₹{row.original.totalPaidAmount?.toLocaleString('en-IN')}
+                </span>
+            )
+        },
+        {
+            accessorKey: 'outstandingAmount',
+            header: 'Outstanding Amount',
+            cell: ({ row }) => (
+                <span className="font-semibold text-red-600">
+                    ₹{row.original.outstandingAmount?.toLocaleString('en-IN')}
+                </span>
+            )
+        },
+        {
+            accessorKey: 'status',
+            header: 'Status',
+            cell: ({ row }) => {
+                const status = row.original.status;
+                const isPending = status?.toLowerCase() === 'pending';
+                const isComplete = status?.toLowerCase() === 'complete' || status?.toLowerCase() === 'completed';
+
+                return (
+                    <Badge
+                        variant={isComplete ? "default" : "outline"}
+                        className={
+                            isComplete
+                                ? "bg-green-100 text-green-800 border-green-300"
+                                : isPending
+                                    ? "bg-amber-100 text-amber-800 border-amber-300"
+                                    : ""
+                        }
+                    >
+                        {status || 'Pending'}
+                    </Badge>
+                );
             }
-            
-            // Format to dd/mm/yy
-            const formattedDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
-            
-            return <span className="text-sm">{formattedDate}</span>;
-        } catch (error) {
-            // If any error occurs, return the original string
-            return <span className="text-sm">{deliveryDate}</span>;
-        }
-    }
-},
-    {
-        accessorKey: 'firmNameMatch',
-        header: 'Firm',
-        cell: ({ row }) => (
-            <Badge variant="outline" className="bg-gray-50">
-                <Building className="mr-1 h-3 w-3" />
-                {row.original.firmNameMatch || '-'}
-            </Badge>
-        )
-    },
-];
+        },
+        {
+            accessorKey: 'paymentTerms',
+            header: 'Payment Terms',
+            cell: ({ row }) => {
+                const terms = row.original.paymentTerms;
+                const isAdvance = terms?.toLowerCase().includes('advance');
+                return (
+                    <Badge variant={isAdvance ? "default" : "outline"} className={isAdvance ? "bg-amber-100 text-amber-800" : ""}>
+                        {terms || '-'}
+                    </Badge>
+                );
+            }
+        },
+        {
+            accessorKey: 'deliveryDate',
+            header: 'Delivery Date',
+            cell: ({ row }) => {
+                const deliveryDate = row.original.deliveryDate;
+
+                // Check if deliveryDate exists and is a valid date string
+                if (!deliveryDate) return <span className="text-sm">-</span>;
+
+                try {
+                    // Try to parse the date
+                    const date = new Date(deliveryDate);
+
+                    // Check if date is valid
+                    if (isNaN(date.getTime())) {
+                        // If not a valid Date object, return the original string
+                        return <span className="text-sm">{deliveryDate}</span>;
+                    }
+
+                    // Format to dd/mm/yy
+                    const formattedDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+
+                    return <span className="text-sm">{formattedDate}</span>;
+                } catch (error) {
+                    // If any error occurs, return the original string
+                    return <span className="text-sm">{deliveryDate}</span>;
+                }
+            }
+        },
+        {
+            accessorKey: 'firmNameMatch',
+            header: 'Firm',
+            cell: ({ row }) => (
+                <Badge variant="outline" className="bg-gray-50">
+                    <Building className="mr-1 h-3 w-3" />
+                    {row.original.firmNameMatch || '-'}
+                </Badge>
+            )
+        },
+    ];
 
     const schema = z.object({
         qty: z.string().min(1, 'Quantity is required'),
         piAmount: z.string().min(1, 'P.I Amount is required'),
-        piCopy: z.string().optional(), // Changed from .min(1, ...) to .optional()
         poRateWithoutTax: z.string().min(1, 'PO Rate Without Tax is required'),
+        piCopy: z.any().optional(),
     });
 
     const form = useForm({
@@ -463,8 +494,8 @@ export default function PIApprovals() {
         defaultValues: {
             qty: '',
             piAmount: '',
-            piCopy: '',
             poRateWithoutTax: '',
+            piCopy: undefined,
         },
     });
 
@@ -474,47 +505,30 @@ export default function PIApprovals() {
         }
     }, [openDialog, form]);
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
 
-        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-        if (!allowedTypes.includes(file.type)) {
-            toast.error('Only PDF, JPG, and PNG files are allowed');
-            return;
-        }
-
-        const maxSize = 10 * 1024 * 1024;
-        if (file.size > maxSize) {
-            toast.error('File size must be less than 10MB');
-            return;
-        }
-
-        try {
-            setUploadingFile(true);
-            const driveLink = await uploadFile({
-                file: file,
-                folderId: import.meta.env.VITE_BILL_PHOTO_FOLDER
-            });
-            
-            form.setValue('piCopy', driveLink);
-            toast.success('File uploaded successfully to Google Drive');
-        } catch (error) {
-            toast.error('Failed to upload file to Google Drive');
-            console.error('Upload error:', error);
-        } finally {
-            setUploadingFile(false);
-        }
-    };
 
     function generatePINumber(): string {
-        const existingPICount = (piApprovalSheet || []).length;
-        const piNumber = `PI-${existingPICount + 48}`;
-        return piNumber;
+        const items = piApprovalSheet || [];
+        if (items.length === 0) {
+            return 'PI-48';
+        }
+
+        // Extract numbers from "PI-XX" format and find the maximum
+        const numbers = items
+            .map(item => {
+                const piNo = item.piNo || '';
+                const match = piNo.toString().match(/PI-(\d+)/i);
+                return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(n => n > 0);
+
+        const maxNum = numbers.length > 0 ? Math.max(...numbers) : 47;
+        return `PI-${maxNum + 1}`;
     }
 
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
+            setSubmitting(true);
             const currentDateTime = new Date()
                 .toLocaleString('en-GB', {
                     day: '2-digit',
@@ -529,26 +543,54 @@ export default function PIApprovals() {
 
             const piNumber = generatePINumber();
 
+            let piCopyUrl = '';
+            if (values.piCopy && values.piCopy[0]) {
+                const file = values.piCopy[0];
+                // Check if file size > 10MB
+                if (file.size > 10 * 1024 * 1024) {
+                    toast.error('File size must be less than 10MB');
+                    setSubmitting(false);
+                    return;
+                }
+                piCopyUrl = await uploadFile({
+                    file,
+                    bucket: 'bills'
+                });
+            }
+
             await postToSheet(
                 [{
                     timestamp: currentDateTime,
                     piNo: piNumber,
+                    poNumber: selectedItem?.poNumber,
                     indentNo: selectedItem?.internalCode,
                     partyName: selectedItem?.partyName,
                     productName: selectedItem?.product,
                     qty: values.qty && !isNaN(Number(values.qty)) ? Number(values.qty) : 0,
                     piAmount: values.piAmount && !isNaN(Number(values.piAmount)) ? Number(values.piAmount) : 0,
-                    piCopy: values.piCopy,
                     poRateWithoutTax: values.poRateWithoutTax && !isNaN(Number(values.poRateWithoutTax)) ? Number(values.poRateWithoutTax) : 0,
+                    piCopy: piCopyUrl,
                     planned: '',
                     actual: '',
                     delay: '',
-                    status: '',
-                    approvalAmount: 0,
+                    status: 'Approved',
+                    firmNameMatch: selectedItem?.firmNameMatch,
                 } as Partial<PIApprovalSheet>],
                 'insert',
                 'PI APPROVAL'
             );
+
+            // Also update PO MASTER status to 'Approved'
+            if (selectedItem?.rowIndex) {
+                await postToSheet(
+                    [{
+                        rowIndex: selectedItem.rowIndex,
+                        status: 'Approved'
+                    }],
+                    'update',
+                    'PO MASTER'
+                );
+            }
 
             toast.success(`PI Payment submitted for PO: ${selectedItem?.poNumber}`);
             setOpenDialog(false);
@@ -556,6 +598,8 @@ export default function PIApprovals() {
         } catch (error) {
             toast.error('Failed to process PI approval');
             console.error(error);
+        } finally {
+            setSubmitting(false);
         }
     }
 
@@ -592,7 +636,7 @@ export default function PIApprovals() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -606,7 +650,7 @@ export default function PIApprovals() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -616,9 +660,8 @@ export default function PIApprovals() {
                                             {stats.pendingCount > 0 ? 'Pending' : 'Completed'}
                                         </p>
                                     </div>
-                                    <div className={`h-10 w-10 flex items-center justify-center rounded-full ${
-                                        stats.pendingCount > 0 ? 'bg-amber-100' : 'bg-green-100'
-                                    }`}>
+                                    <div className={`h-10 w-10 flex items-center justify-center rounded-full ${stats.pendingCount > 0 ? 'bg-amber-100' : 'bg-green-100'
+                                        }`}>
                                         {stats.pendingCount > 0 ? (
                                             <AlertCircle className="h-6 w-6 text-amber-600" />
                                         ) : (
@@ -739,23 +782,23 @@ export default function PIApprovals() {
                                     <div className="space-y-4">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <FormField
-    control={form.control}
-    name="qty"
-    render={({ field }) => (
-        <FormItem>
-            <FormLabel className="font-medium">Remarks *</FormLabel>
-            <FormControl>
-                <Input
-                    type="text"
-                    placeholder="Enter remarks"
-                    className="border-gray-300 focus:border-purple-500"
-                    {...field}
-                />
-            </FormControl>
-            <FormMessage />
-        </FormItem>
-    )}
-/>
+                                                control={form.control}
+                                                name="qty"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="font-medium">Remarks *</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="text"
+                                                                placeholder="Enter remarks"
+                                                                className="border-gray-300 focus:border-purple-500"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
 
                                             <FormField
                                                 control={form.control}
@@ -781,57 +824,7 @@ export default function PIApprovals() {
                                             />
                                         </div>
 
-                                        <FormField
-                                            control={form.control}
-                                            name="piCopy"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="font-medium flex items-center gap-2">
-                                                        <Upload className="h-4 w-4" />
-                                                        P.I Copy (Upload File) 
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <div className="space-y-2">
-                                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-purple-400 transition-colors">
-                                                                <Input
-                                                                    type="file"
-                                                                    accept=".pdf,.jpg,.jpeg,.png"
-                                                                    onChange={handleFileUpload}
-                                                                    disabled={uploadingFile}
-                                                                    className="border-0 cursor-pointer"
-                                                                />
-                                                                <p className="text-xs text-gray-500 mt-2">
-                                                                    Upload PI copy (PDF, JPG, PNG - Max 10MB)
-                                                                </p>
-                                                            </div>
-                                                            {uploadingFile && (
-                                                                <div className="flex items-center gap-2 text-sm text-blue-600">
-                                                                    <Loader size={16} color="blue" />
-                                                                    Uploading to Google Drive...
-                                                                </div>
-                                                            )}
-                                                            {field.value && !uploadingFile && (
-                                                                <div className="space-y-1">
-                                                                    <p className="text-sm text-green-600 flex items-center gap-2">
-                                                                        <CheckCircle className="h-4 w-4" />
-                                                                        File uploaded successfully
-                                                                    </p>
-                                                                    <a 
-                                                                        href={field.value} 
-                                                                        target="_blank" 
-                                                                        rel="noopener noreferrer"
-                                                                        className="text-sm text-blue-600 hover:underline flex items-center gap-1"
-                                                                    >
-                                                                        View uploaded file →
-                                                                    </a>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
+
 
                                         <FormField
                                             control={form.control}
@@ -852,25 +845,49 @@ export default function PIApprovals() {
                                                 </FormItem>
                                             )}
                                         />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="piCopy"
+                                            render={({ field: { value, onChange, ...fieldProps } }) => (
+                                                <FormItem>
+                                                    <FormLabel className="font-medium">
+                                                        Upload PI copy (PDF, JPG, PNG - Max 10MB)
+                                                    </FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            {...fieldProps}
+                                                            type="file"
+                                                            accept=".pdf,.jpg,.jpeg,.png"
+                                                            onChange={(event) =>
+                                                                onChange(event.target.files)
+                                                            }
+                                                            className="border-gray-300 focus:border-purple-500 h-auto py-1.5"
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
                                     <Separator />
 
                                     <DialogFooter className="gap-2">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 type="button"
                                                 className="border-gray-300"
-                                                disabled={form.formState.isSubmitting || uploadingFile}
+                                                disabled={form.formState.isSubmitting}
                                             >
                                                 Cancel
                                             </Button>
                                         </DialogClose>
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             className="bg-purple-600 hover:bg-purple-700 shadow-sm"
-                                            disabled={form.formState.isSubmitting || uploadingFile}
+                                            disabled={form.formState.isSubmitting}
                                         >
                                             {form.formState.isSubmitting ? (
                                                 <>

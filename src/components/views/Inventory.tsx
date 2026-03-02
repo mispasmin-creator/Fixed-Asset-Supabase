@@ -13,6 +13,7 @@ interface InventoryTable {
     groupHead: string;
     uom: string;
     status: string;
+    maxLevel: number;
     opening: number;
     rate: number;
     indented: number;
@@ -38,7 +39,7 @@ export default () => {
         tableData.forEach(item => {
             totalValue += item.totalPrice || 0;
             totalItems += 1;
-            
+
             const code = item.status?.toLowerCase();
             if (item.current === 0) {
                 outOfStock++;
@@ -72,6 +73,7 @@ export default () => {
                 rate: i.individualRate || 0,
                 current: i.current || 0,
                 status: i.colorCode || '',
+                maxLevel: i.maxLevel || 0,
                 indented: i.indented || 0,
                 opening: i.opening || 0,
                 itemName: i.itemName || '',
@@ -100,7 +102,7 @@ export default () => {
             cell: ({ row }) => {
                 const code = row.original.status?.toLowerCase();
                 const current = row.original.current || 0;
-                
+
                 if (current === 0) {
                     return (
                         <div className="flex justify-center">
@@ -140,6 +142,15 @@ export default () => {
             },
         },
         {
+            accessorKey: 'maxLevel',
+            header: 'Max Level',
+            cell: ({ row }) => (
+                <div className="text-center font-semibold text-gray-700">
+                    {row.original.maxLevel || 0}
+                </div>
+            ),
+        },
+        {
             accessorKey: 'current',
             header: 'Quantity',
             cell: ({ row }) => (
@@ -168,6 +179,15 @@ export default () => {
                     <div className="font-bold text-gray-900">
                         ₹{row.original.totalPrice?.toLocaleString() || '0'}
                     </div>
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'opening',
+            header: 'Opening Qty',
+            cell: ({ row }) => (
+                <div className="text-center">
+                    {row.original.opening || 0}
                 </div>
             ),
         },
@@ -327,18 +347,18 @@ export default () => {
                                     <span className="text-sm text-gray-500">{stats.totalItems} items total</span>
                                 </div>
                                 <div className="flex h-4 rounded-full overflow-hidden bg-gray-100">
-                                    <div 
-                                        className="bg-green-500" 
+                                    <div
+                                        className="bg-green-500"
                                         style={{ width: `${(stats.inStock / stats.totalItems) * 100}%` }}
                                         title={`In Stock: ${stats.inStock}`}
                                     ></div>
-                                    <div 
-                                        className="bg-amber-500" 
+                                    <div
+                                        className="bg-amber-500"
                                         style={{ width: `${(stats.lowStock / stats.totalItems) * 100}%` }}
                                         title={`Low Stock: ${stats.lowStock}`}
                                     ></div>
-                                    <div 
-                                        className="bg-red-500" 
+                                    <div
+                                        className="bg-red-500"
                                         style={{ width: `${(stats.outOfStock / stats.totalItems) * 100}%` }}
                                         title={`Out of Stock: ${stats.outOfStock}`}
                                     ></div>

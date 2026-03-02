@@ -28,15 +28,41 @@ import Heading from '../element/Heading';
 import { formatDate } from '@/lib/utils';
 import { Input } from '../ui/input';
 
+const formatDateTime = (isoString?: string) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear().toString().slice(-2);
+    const time = date.toLocaleString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+    return `${d}/${m}/${y} ${time}`;
+};
+
+const formatDateTiny = (isoString?: string) => {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return isoString;
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear().toString().slice(-2);
+    return `${d}/${m}/${y}`;
+};
+
 interface RateApprovalData {
     indentNo: string;
     indenter: string;
     department: string;
     product: string;
     comparisonSheet: string;
-    vendors: [string, string, string, string, string, string][];
+    vendors: [string, string, string, string, string, string, string][];
     date: string;
     firmNameMatch?: string;
+    planned3?: string;
 }
 
 interface HistoryData {
@@ -47,10 +73,11 @@ interface HistoryData {
     vendor: [string, string];
     date: string;
     firmNameMatch?: string;
+    planned3?: string;
 }
 
 export default () => {
-    const { indentLoading, indentSheet, updateIndentSheet } = useSheets();
+    const { indentLoading, indentSheet, updateIndentSheet, masterSheet } = useSheets();
     const { user } = useAuth();
 
     const [selectedIndent, setSelectedIndent] = useState<RateApprovalData | null>(null);
@@ -59,34 +86,18 @@ export default () => {
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
     const [openDialog, setOpenDialog] = useState(false);
 
-    // ✅ CHANGED: Filter for pending - planned1 not empty, actual1 empty
+    // Filter for pending - planned3 not empty, actual3 empty
     useEffect(() => {
-        console.log('=== RATE APPROVAL - PENDING ===');
-        console.log('Total indent records:', indentSheet.length);
-        
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
-        console.log('Filtered by firm:', filteredByFirm.length);
-        
+
         const pending = filteredByFirm.filter((sheet) => {
             const hasPlanned3 = sheet.planned3 && sheet.planned3 !== '';
             const noActual3 = !sheet.actual3 || sheet.actual3 === '';
-            
-            if (hasPlanned3 && noActual3) {
-                console.log('✅ Pending item:', {
-                    indent: sheet.indentNumber,
-                    planned3: sheet.planned3,
-                    actual3: sheet.actual3
-                });
-            }
-            
             return hasPlanned3 && noActual3;
         });
-        
-        console.log('Pending items count:', pending.length);
-        
+
         setTableData(
             pending.map((sheet: any) => ({
                 indentNo: sheet.indentNumber,
@@ -95,62 +106,53 @@ export default () => {
                 department: sheet.department,
                 product: sheet.productName,
                 comparisonSheet: sheet.comparisonSheet || '',
-                date: formatDate(new Date(sheet.timestamp)),
+                date: sheet.timestamp || '',
+                planned3: sheet.planned3 || '',
                 vendors: [
                     [
-                        sheet.vendorName1, 
-                        sheet.rate1?.toString() || '0', 
+                        sheet.vendorName1,
+                        sheet.rate1?.toString() || '0',
                         sheet.paymentTerm1,
                         sheet.selectRateType1 || 'With Tax',
                         sheet.withTaxOrNot1 || 'Yes',
-                        sheet.taxValue1?.toString() || '0'
+                        sheet.taxValue1?.toString() || '0',
+                        sheet.vendor1Id
                     ],
                     [
-                        sheet.vendorName2, 
-                        sheet.rate2?.toString() || '0', 
+                        sheet.vendorName2,
+                        sheet.rate2?.toString() || '0',
                         sheet.paymentTerm2,
                         sheet.selectRateType2 || 'With Tax',
                         sheet.withTaxOrNot2 || 'Yes',
-                        sheet.taxValue2?.toString() || '0'
+                        sheet.taxValue2?.toString() || '0',
+                        sheet.vendor2Id
                     ],
                     [
-                        sheet.vendorName3, 
-                        sheet.rate3?.toString() || '0', 
+                        sheet.vendorName3,
+                        sheet.rate3?.toString() || '0',
                         sheet.paymentTerm3,
                         sheet.selectRateType3 || 'With Tax',
                         sheet.withTaxOrNot3 || 'Yes',
-                        sheet.taxValue3?.toString() || '0'
+                        sheet.taxValue3?.toString() || '0',
+                        sheet.vendor3Id
                     ],
                 ],
             }))
         );
     }, [indentSheet, user.firmNameMatch]);
 
-    // ✅ CHANGED: Filter for history - planned1 not empty, actual1 not empty
+    // Filter for history - planned3 not empty, actual3 not empty
     useEffect(() => {
-        console.log('=== RATE APPROVAL - HISTORY ===');
-        
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
+
         const history = filteredByFirm.filter((sheet) => {
             const hasPlanned3 = sheet.planned3 && sheet.planned3 !== '';
             const hasActual3 = sheet.actual3 && sheet.actual3 !== '';
-            
-            if (hasPlanned3 && hasActual3) {
-                console.log('✅ History item:', {
-                    indent: sheet.indentNumber,
-                    planned3: sheet.planned3,
-                    actual3: sheet.actual3
-                });
-            }
-            
             return hasPlanned3 && hasActual3;
         });
-        
-        console.log('History items count:', history.length);
-        
+
         setHistoryData(
             history.map((sheet: any) => ({
                 indentNo: sheet.indentNumber,
@@ -158,7 +160,8 @@ export default () => {
                 indenter: sheet.indenterName,
                 department: sheet.department,
                 product: sheet.productName,
-                date: new Date(sheet.timestamp).toDateString(),
+                date: sheet.timestamp || '',
+                planned3: sheet.planned3 || '',
                 vendor: [sheet.approvedVendorName, sheet.approvedRate?.toString() || '0'],
             }))
         );
@@ -192,8 +195,8 @@ export default () => {
                 },
             ]
             : []),
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="text-center font-bold text-blue-700">
@@ -201,8 +204,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -211,8 +214,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indenter', 
+        {
+            accessorKey: 'indenter',
             header: 'Indenter',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -221,8 +224,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'department', 
+        {
+            accessorKey: 'department',
             header: 'Department',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -231,8 +234,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'product', 
+        {
+            accessorKey: 'product',
             header: 'Product',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -241,13 +244,31 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'date', 
-            header: 'Date',
+        {
+            accessorKey: 'date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string}
+                    {formatDateTime(getValue() as string)}
+                </div>
+            )
+        },
+        {
+            accessorKey: 'planned3',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="text-center">
+                    {formatDateTiny(getValue() as string)}
                 </div>
             )
         },
@@ -276,9 +297,9 @@ export default () => {
                 const sheet = row.original.comparisonSheet;
                 return sheet ? (
                     <div className="flex justify-center">
-                        <a 
-                            href={sheet} 
-                            target="_blank" 
+                        <a
+                            href={sheet}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-800 font-semibold underline flex items-center gap-1"
                         >
@@ -301,7 +322,7 @@ export default () => {
                     const indent = row.original;
 
                     return (
-                        <div className="flex justify-center">
+                        <div className="flex justify-center gap-2">
                             <DialogTrigger asChild>
                                 <Button
                                     variant="outline"
@@ -313,13 +334,25 @@ export default () => {
                                     Update
                                 </Button>
                             </DialogTrigger>
+                            <DialogTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSelectedHistory(indent);
+                                    }}
+                                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 font-semibold rounded-lg shadow-md"
+                                >
+                                    Edit
+                                </Button>
+                            </DialogTrigger>
                         </div>
                     );
                 },
             },
         ] : []),
-        { 
-            accessorKey: 'indentNo', 
+
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="text-center font-bold text-blue-700">
@@ -327,8 +360,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -337,8 +370,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indenter', 
+        {
+            accessorKey: 'indenter',
             header: 'Indenter',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -347,8 +380,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'department', 
+        {
+            accessorKey: 'department',
             header: 'Department',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -357,8 +390,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'product', 
+        {
+            accessorKey: 'product',
             header: 'Product',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -367,13 +400,17 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'date', 
-            header: 'Date',
+        {
+            accessorKey: 'date',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Date</span>
+                </div>
+            ),
             cell: ({ getValue }) => (
                 <div className="text-center">
-                    <Calendar className="inline mr-2 h-4 w-4 text-gray-600" />
-                    {getValue() as string}
+                    {formatDateTime(getValue() as string)}
                 </div>
             )
         },
@@ -409,25 +446,37 @@ export default () => {
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
             const filtered = indentSheet.filter((s) => s.indentNumber === selectedIndent?.indentNo);
-            console.log("🔍 Filtered data:", filtered);
-            console.log("🔍 First item rowIndex:", filtered[0]?.rowIndex);
-            
             const selectedVendor = selectedIndent?.vendors[values.vendor];
-            
+            const vendorName = selectedVendor?.[0] || '';
+
+            let vendorId = selectedVendor?.[6] || masterSheet?.vendors?.find(v => v.vendorName === vendorName)?.id;
+
+            if (!vendorId && vendorName) {
+                const vendorResult = await postToSheet([{
+                    vendor_name: vendorName,
+                    rate_type: selectedVendor?.[3] || '',
+                    rate: Number(selectedVendor?.[1] || 0),
+                    with_tax: selectedVendor?.[4] === 'Yes',
+                    tax_value: Number(selectedVendor?.[5] || 0),
+                    payment_term: selectedVendor?.[2] || '',
+                }], 'insert', 'VENDORS');
+
+                if (vendorResult && (vendorResult as any).success && (vendorResult as any).data?.[0]) {
+                    vendorId = (vendorResult as any).data[0].id;
+                }
+            }
+
             const updatedRows = filtered.map((prev: any) => ({
                 rowIndex: prev.rowIndex,
+                indentNumber: prev.indentNumber,
                 actual3: new Date().toISOString(),
-                approvedVendorName: selectedVendor?.[0] || '',
+                approvedVendorName: vendorName,
                 approvedRate: selectedVendor?.[1] || '0',
                 approvedPaymentTerm: selectedVendor?.[2] || '',
-                withTaxOrNot4: selectedVendor?.[4] || 'Yes',
-                taxValue4: selectedVendor?.[5] || '0',
+                approvedVendorId: vendorId,
             }));
-            
-            console.log("📤 Sending to backend:", updatedRows);
-            
+
             await postToSheet(updatedRows, 'update');
-            
             toast.success(`Approved vendor for ${selectedIndent?.indentNo}`);
             setOpenDialog(false);
             form.reset();
@@ -457,31 +506,21 @@ export default () => {
 
     async function onSubmitHistoryUpdate(values: z.infer<typeof historyUpdateSchema>) {
         try {
-            console.log("✅ Submitted Values:", values);
-            console.log("✅ Selected History:", selectedHistory);
-
             const filtered = indentSheet.filter(
                 (s) => s.indentNumber === selectedHistory?.indentNo
             );
-            console.log("✅ Filtered Sheet Rows:", filtered);
 
             const updatedRows = filtered.map((prev: any) => ({
                 rowIndex: prev.rowIndex,
+                indentNumber: prev.indentNumber,
                 approvedRate: values.rate,
             }));
-            console.log("✅ Updated Rows Before Sending:", updatedRows);
 
             await postToSheet(updatedRows, 'update');
-            console.log("✅ postToSheet completed");
-
             toast.success(`Updated rate of ${selectedHistory?.indentNo}`);
             setOpenDialog(false);
-
             historyUpdateForm.reset({ rate: 0 });
-            console.log("✅ Form reset");
-
             setTimeout(() => {
-                console.log("🔄 Refreshing indent sheet...");
                 updateIndentSheet();
             }, 1000);
         } catch (err) {
@@ -507,7 +546,7 @@ export default () => {
                         >
                             <Users size={50} className="text-purple-600" />
                         </Heading>
-                        
+
                         <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-6 mb-6">
                             <TabsContent value="pending" className="mt-0">
                                 <DataTable
@@ -546,7 +585,7 @@ export default () => {
                                             </span>
                                         </DialogDescription>
                                     </DialogHeader>
-                                    
+
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gradient-to-r from-purple-50 to-blue-50 py-4 px-6 rounded-xl border-2 border-gray-200">
                                         <div className="space-y-1">
                                             <p className="font-semibold text-gray-700">Indenter</p>
@@ -567,7 +606,7 @@ export default () => {
                                             </p>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="grid gap-4">
                                         <FormField
                                             control={form.control}
@@ -594,18 +633,18 @@ export default () => {
                                                                                             <p className="text-sm text-muted-foreground">
                                                                                                 Payment Term: {vendor[2]}
                                                                                             </p>
-                                                                                            
+
                                                                                             {vendor[3] === 'Basic Rate' && vendor[4] === 'No' ? (
                                                                                                 <p className="text-xs text-orange-600 font-medium mt-1 bg-orange-100 px-2 py-1 rounded-full inline-block">
-                                                                                                📊 Without Tax - GST: {vendor[5]}%
+                                                                                                    📊 Without Tax - GST: {vendor[5]}%
                                                                                                 </p>
                                                                                             ) : vendor[3] === 'With Tax' && vendor[4] === 'Yes' ? (
                                                                                                 <p className="text-xs text-green-600 font-medium mt-1 bg-green-100 px-2 py-1 rounded-full inline-block">
-                                                                                                ✅ With Tax
+                                                                                                    ✅ With Tax
                                                                                                 </p>
                                                                                             ) : (
                                                                                                 <p className="text-xs text-green-600 font-medium mt-1 bg-green-100 px-2 py-1 rounded-full inline-block">
-                                                                                                ✅ With Tax
+                                                                                                    ✅ With Tax
                                                                                                 </p>
                                                                                             )}
                                                                                         </div>
@@ -633,19 +672,19 @@ export default () => {
                                             )}
                                         />
                                     </div>
-                                    
+
                                     <DialogFooter className="flex justify-center gap-4 pt-6">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close
                                             </Button>
                                         </DialogClose>
 
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             disabled={form.formState.isSubmitting}
                                             className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl px-8 py-3 text-lg font-semibold border-0"
                                         >
@@ -680,7 +719,7 @@ export default () => {
                                             </span>
                                         </DialogDescription>
                                     </DialogHeader>
-                                    
+
                                     <div className="grid gap-4">
                                         <FormField
                                             control={historyUpdateForm.control}
@@ -689,9 +728,9 @@ export default () => {
                                                 <FormItem>
                                                     <FormLabel className="font-semibold text-gray-700 text-lg">Rate</FormLabel>
                                                     <FormControl>
-                                                        <Input 
-                                                            type="number" 
-                                                            {...field} 
+                                                        <Input
+                                                            type="number"
+                                                            {...field}
                                                             className="h-12 border-2 border-gray-300 rounded-xl text-lg text-center"
                                                         />
                                                     </FormControl>
@@ -702,8 +741,8 @@ export default () => {
 
                                     <DialogFooter className="flex justify-center gap-4">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close

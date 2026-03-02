@@ -22,6 +22,40 @@ import {
 import { postToSheet } from '@/lib/fetchers';
 import { toast } from 'sonner';
 import { PuffLoader as Loader } from 'react-spinners';
+import { Calendar } from 'lucide-react';
+
+const formatDateTime = (isoString?: string) => {
+    if (!isoString) return '-';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return isoString;
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear().toString().slice(-2);
+        const time = date.toLocaleString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+        return `${d}/${m}/${y} ${time}`;
+    } catch {
+        return isoString;
+    }
+};
+
+const formatDateTiny = (isoString?: string) => {
+    if (!isoString) return '-';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return isoString;
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const y = date.getFullYear().toString().slice(-2);
+        return `${d}/${m}/${y}`;
+    } catch {
+        return isoString;
+    }
+};
 
 interface PendingIndentsData {
     date: string;
@@ -65,30 +99,27 @@ export default () => {
     const [selectedIndent, setSelectedIndent] = useState<PendingIndentsData | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(()=>{
-        console.log(indentSheet);
-    },[indentSheet])
 
     // Fetching pending table data (UPDATED WITH PLANNED DATE)
     useEffect(() => {
         // Pehle firm name se filter karo (case-insensitive)
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
+
         setPendingTableData(
             filteredByFirm
                 .filter((sheet: any) => {
-                    return sheet.status === "Pending" && 
-                        sheet.approvedVendorName && 
+                    return sheet.status === "Pending" &&
+                        sheet.approvedVendorName &&
                         sheet.approvedVendorName.toString().trim() !== '' &&
-                        (!sheet.poRequred || 
-                        sheet.poRequred.toString().trim() === '' || 
-                        sheet.poRequred.toString().trim() === 'undefined' ||
-                        sheet.poRequred === null);
+                        (!sheet.poRequred ||
+                            sheet.poRequred.toString().trim() === '' ||
+                            sheet.poRequred.toString().trim() === 'undefined' ||
+                            sheet.poRequred === null);
                 })
                 .map((sheet: any) => ({
-                    date: formatDate(new Date(sheet.timestamp)),
+                    date: sheet.timestamp || '',
                     indentNo: sheet.indentNumber,
                     firmNameMatch: sheet.firmNameMatch || '',
                     product: sheet.productName,
@@ -108,19 +139,19 @@ export default () => {
     // Fetching history table data (UPDATED WITH PLANNED DATE)
     useEffect(() => {
         // Pehle firm name se filter karo (case-insensitive)
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
+
         setHistoryTableData(
             filteredByFirm
                 .filter((sheet: any) => {
-                    return sheet.poRequred && 
+                    return sheet.poRequred &&
                         sheet.poRequred.toString().trim() !== '' &&
                         (sheet.poRequred.toString().trim() === 'Yes' || sheet.poRequred.toString().trim() === 'No');
                 })
                 .map((sheet: any) => ({
-                    date: formatDate(new Date(sheet.timestamp)),
+                    date: sheet.timestamp || '',
                     indentNo: sheet.indentNumber,
                     firmNameMatch: sheet.firmNameMatch || '',
                     product: sheet.productName,
@@ -159,19 +190,19 @@ export default () => {
             // Create updated row with ONLY poRequred field (note the spelling)
             const updatedRow = {
                 rowIndex: matchingRow.rowIndex,
+                indentNumber: matchingRow.indentNumber,
                 sheetName: 'INDENT',
                 poRequred: response, // Column BT - "Po Requred" becomes "poRequred" in camelCase
             };
 
-            console.log('Updating row:', updatedRow);
 
             const result = await postToSheet([updatedRow], 'update', 'INDENT');
-            
+
             if (result && result.success) {
                 toast.success(`PO Required status updated to ${response}`);
                 setOpenDialog(false);
                 setSelectedIndent(null);
-                
+
                 // Refresh the indent sheet after 1 second
                 setTimeout(() => {
                     updateIndentSheet();
@@ -213,20 +244,31 @@ export default () => {
         },
         {
             accessorKey: 'date',
-            header: 'Date',
-            cell: ({ getValue }) => <div className="px-2">{getValue() as string}</div>
+            header: () => (
+                <div className="flex items-center justify-center gap-1 px-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="px-2 text-center text-gray-600">
+                    {formatDateTime(getValue() as string)}
+                </div>
+            )
         },
         {
             accessorKey: 'plannedDate',
-            header: 'Planned Date',
-            cell: ({ getValue }) => {
-                const plannedDate = getValue() as string;
-                return (
-                    <div className="px-2">
-                        {plannedDate ? formatDate(new Date(plannedDate)) : '-'}
-                    </div>
-                );
-            }
+            header: () => (
+                <div className="flex items-center justify-center gap-1 px-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="px-2 text-center">
+                    {formatDateTiny(getValue() as string)}
+                </div>
+            )
         },
         {
             accessorKey: 'indentNo',
@@ -268,11 +310,10 @@ export default () => {
                 const value = getValue() as string;
                 return (
                     <div className="px-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            value === 'Yes' 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-orange-100 text-orange-800 border border-orange-200'
-                        }`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'Yes'
+                            ? 'bg-green-100 text-green-800 border border-green-200'
+                            : 'bg-orange-100 text-orange-800 border border-orange-200'
+                            }`}>
                             {value}
                         </span>
                     </div>
@@ -309,20 +350,31 @@ export default () => {
     const historyColumns: ColumnDef<HistoryIndentsData>[] = [
         {
             accessorKey: 'date',
-            header: 'Date',
-            cell: ({ getValue }) => <div className="px-2">{getValue() as string}</div>
+            header: () => (
+                <div className="flex items-center justify-center gap-1 px-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="px-2 text-center text-gray-600">
+                    {formatDateTime(getValue() as string)}
+                </div>
+            )
         },
         {
             accessorKey: 'plannedDate',
-            header: 'Planned Date',
-            cell: ({ getValue }) => {
-                const plannedDate = getValue() as string;
-                return (
-                    <div className="px-2">
-                        {plannedDate ? formatDate(new Date(plannedDate)) : '-'}
-                    </div>
-                );
-            }
+            header: () => (
+                <div className="flex items-center justify-center gap-1 px-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ getValue }) => (
+                <div className="px-2 text-center text-sm">
+                    {formatDateTiny(getValue() as string)}
+                </div>
+            )
         },
         {
             accessorKey: 'indentNo',
@@ -364,11 +416,10 @@ export default () => {
                 const value = getValue() as string;
                 return (
                     <div className="px-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            value === 'Yes' 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-orange-100 text-orange-800 border border-orange-200'
-                        }`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'Yes'
+                            ? 'bg-green-100 text-green-800 border border-green-200'
+                            : 'bg-orange-100 text-orange-800 border border-orange-200'
+                            }`}>
                             {value}
                         </span>
                     </div>
@@ -404,7 +455,7 @@ export default () => {
             header: 'PO Required',
             cell: ({ row }) => {
                 const status = row.original.poRequiredStatus;
-                
+
                 if (status === 'No') {
                     return (
                         <div className="px-2">
@@ -435,12 +486,12 @@ export default () => {
                     >
                         <ListTodo size={50} className="text-primary" />
                     </Heading>
-                    
+
                     <TabsContent value="pending">
                         <DataTable
                             data={pendingTableData}
                             columns={pendingColumns}
-                            searchFields={['product', 'vendorName', 'paymentTerm', 'specifications','firmNameMatch']}
+                            searchFields={['product', 'vendorName', 'paymentTerm', 'specifications', 'firmNameMatch']}
                             dataLoading={indentLoading}
                             className="h-[80dvh]"
                         />
@@ -450,7 +501,7 @@ export default () => {
                         <DataTable
                             data={historyTableData}
                             columns={historyColumns}
-                            searchFields={['product', 'vendorName', 'paymentTerm', 'specifications','firmNameMatch']}
+                            searchFields={['product', 'vendorName', 'paymentTerm', 'specifications', 'firmNameMatch']}
                             dataLoading={indentLoading}
                             className="h-[80dvh]"
                         />
@@ -491,7 +542,7 @@ export default () => {
                                     Cancel
                                 </Button>
                             </DialogClose>
-                            <Button 
+                            <Button
                                 variant="destructive"
                                 onClick={() => handlePoRequired('No')}
                                 disabled={isSubmitting}
@@ -499,7 +550,7 @@ export default () => {
                                 {isSubmitting && <Loader size={16} color="white" className="mr-2" />}
                                 No
                             </Button>
-                            <Button 
+                            <Button
                                 variant="default"
                                 onClick={() => handlePoRequired('Yes')}
                                 disabled={isSubmitting}

@@ -28,6 +28,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 
+const formatDate = (dateString: string): string => {
+    if (!dateString) return '';
+    try {
+        const dateObj = new Date(dateString);
+        if (isNaN(dateObj.getTime())) return dateString;
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = String(dateObj.getFullYear()).slice(-2);
+        return `${day}/${month}/${year}`;
+    } catch {
+        return dateString;
+    }
+};
+
 interface StoreInPendingData {
     liftNumber: string;
     indentNumber: string;
@@ -45,9 +59,11 @@ interface StoreInPendingData {
     amount: number;
     firmNameMatch: string;
     damageOrder?: string;
-    quantityAsPerBill?: number;
+    quantityAsPerBill?: string;
     priceAsPerPo?: number;
     remark?: string;
+    timestamp: string;
+    plannedDate: string;
 }
 
 interface StoreInHistoryData {
@@ -69,7 +85,7 @@ interface StoreInHistoryData {
     reason: string;
     firmNameMatch: string;
     damageOrder?: string;
-    quantityAsPerBill?: number;
+    quantityAsPerBill?: string;
     priceAsPerPo?: number;
     remark?: string;
 }
@@ -96,11 +112,12 @@ interface StoreInSheetItem {
     debitNote?: string;
     reason?: string;
     damageOrder?: string;
-    quantityAsPerBill?: number;
+    quantityAsPerBill?: string;
     priceAsPerPo?: number;
     remark?: string;
     firmNameMatch?: string;
     rowIndex?: number;
+    timestamp?: string;
 }
 
 const schema = z.object({
@@ -140,13 +157,13 @@ export default () => {
     });
 
     useEffect(() => {
-        const filteredByFirm = storeInSheet.filter((item: StoreInSheetItem) => 
+        const filteredByFirm = storeInSheet.filter((item: StoreInSheetItem) =>
             user.firmNameMatch?.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
 
-        const pendingItems = filteredByFirm.filter((i: StoreInSheetItem) => i.planned7 !== '' && i.actual7 === '');
-        const historyItems = filteredByFirm.filter((i: StoreInSheetItem) => i.planned7 !== '' && i.actual7 !== '');
-        
+        const pendingItems = filteredByFirm.filter((i: StoreInSheetItem) => i.planned7 && i.planned7 !== '' && !i.actual7);
+        const historyItems = filteredByFirm.filter((i: StoreInSheetItem) => i.planned7 && i.planned7 !== '' && i.actual7);
+
         setPendingData(
             pendingItems.map((i: StoreInSheetItem) => ({
                 liftNumber: i.liftNumber || '',
@@ -164,10 +181,12 @@ export default () => {
                 transporterName: i.transporterName || '',
                 amount: i.amount || 0,
                 damageOrder: i.damageOrder || '',
-                quantityAsPerBill: i.quantityAsPerBill || 0,
+                quantityAsPerBill: i.quantityAsPerBill || 'No',
                 priceAsPerPo: i.priceAsPerPo || 0,
                 remark: i.remark || '',
                 firmNameMatch: i.firmNameMatch || '',
+                timestamp: i.timestamp || '',
+                plannedDate: i.planned7 || '',
             }))
         );
 
@@ -190,7 +209,7 @@ export default () => {
                 debitNote: i.debitNote || '',
                 reason: i.reason || '',
                 damageOrder: i.damageOrder || '',
-                quantityAsPerBill: i.quantityAsPerBill || 0,
+                quantityAsPerBill: i.quantityAsPerBill || 'No',
                 priceAsPerPo: i.priceAsPerPo || 0,
                 remark: i.remark || '',
                 firmNameMatch: i.firmNameMatch || '',
@@ -213,58 +232,74 @@ export default () => {
     const pendingColumns: ColumnDef<StoreInPendingData>[] = [
         ...(user.receiveItemView
             ? [
-                  {
-                      header: 'Action',
-                      cell: ({ row }: { row: Row<StoreInPendingData> }) => {
-                          const item = row.original;
-                          return (
-                              <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={() => {
-                                      setSelectedItem(item);
-                                      setOpenDialog(true);
-                                  }}
-                                  className="bg-blue-600 hover:bg-blue-700 shadow-sm"
-                              >
-                                  <Package className="mr-2 h-3 w-3" />
-                                  Process
-                              </Button>
-                          );
-                      },
-                  },
-              ]
+                {
+                    header: 'Action',
+                    cell: ({ row }: { row: Row<StoreInPendingData> }) => {
+                        const item = row.original;
+                        return (
+                            <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                    setSelectedItem(item);
+                                    setOpenDialog(true);
+                                }}
+                                className="bg-blue-600 hover:bg-blue-700 shadow-sm"
+                            >
+                                <Package className="mr-2 h-3 w-3" />
+                                Process
+                            </Button>
+                        );
+                    },
+                },
+            ]
             : []),
-        { 
-            accessorKey: 'liftNumber', 
+        {
+            accessorKey: 'timestamp',
+            header: 'Timestamp',
+            cell: ({ row }) => (
+                <span className="text-gray-500 text-xs">{formatDate(row.original.timestamp)}</span>
+            )
+        },
+        {
+            accessorKey: 'plannedDate',
+            header: 'Planned Date',
+            cell: ({ row }) => (
+                <Badge variant="outline" className="bg-amber-50">
+                    {formatDate(row.original.plannedDate)}
+                </Badge>
+            )
+        },
+        {
+            accessorKey: 'liftNumber',
             header: 'Lift No.',
             cell: ({ row }) => (
                 <span className="font-medium text-blue-700">{row.original.liftNumber}</span>
             )
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.billNo}</span>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -273,15 +308,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -289,15 +324,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'billAmount', 
+        {
+            accessorKey: 'billAmount',
             header: 'Bill Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.billAmount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'paymentType', 
+        {
+            accessorKey: 'paymentType',
             header: 'Payment',
             cell: ({ row }) => {
                 const type = row.original.paymentType;
@@ -329,16 +364,16 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'transportationInclude', 
+        {
+            accessorKey: 'transportationInclude',
             header: 'Transport'
         },
-        { 
-            accessorKey: 'transporterName', 
+        {
+            accessorKey: 'transporterName',
             header: 'Transporter'
         },
-        { 
-            accessorKey: 'amount', 
+        {
+            accessorKey: 'amount',
             header: 'Amount',
             cell: ({ row }) => (
                 <span className="font-medium">₹{row.original.amount?.toLocaleString('en-IN')}</span>
@@ -347,36 +382,36 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<StoreInHistoryData>[] = [
-        { 
-            accessorKey: 'liftNumber', 
+        {
+            accessorKey: 'liftNumber',
             header: 'Lift No.',
             cell: ({ row }) => (
                 <span className="font-medium text-blue-700">{row.original.liftNumber}</span>
             )
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.billNo}</span>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -385,15 +420,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-blue-50">
@@ -401,15 +436,15 @@ export default () => {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'billAmount', 
+        {
+            accessorKey: 'billAmount',
             header: 'Bill Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.billAmount?.toLocaleString('en-IN')}</span>
             )
         },
-        { 
-            accessorKey: 'paymentType', 
+        {
+            accessorKey: 'paymentType',
             header: 'Payment',
             cell: ({ row }) => {
                 const type = row.original.paymentType;
@@ -441,8 +476,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'transportationInclude', 
+        {
+            accessorKey: 'transportationInclude',
             header: 'Transport'
         },
         {
@@ -454,11 +489,10 @@ export default () => {
                 return (
                     <Badge
                         variant={isAccepted ? "default" : "destructive"}
-                        className={`inline-flex items-center gap-1 ${
-                            isAccepted
-                                ? 'bg-green-100 text-green-800 hover:bg-green-100'
-                                : 'bg-red-100 text-red-800 hover:bg-red-100'
-                        }`}
+                        className={`inline-flex items-center gap-1 ${isAccepted
+                            ? 'bg-green-100 text-green-800 hover:bg-green-100'
+                            : 'bg-red-100 text-red-800 hover:bg-red-100'
+                            }`}
                     >
                         {isAccepted ? (
                             <CheckCircle className="h-3 w-3" />
@@ -490,8 +524,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'debitNote', 
+        {
+            accessorKey: 'debitNote',
             header: 'Debit Note',
             cell: ({ row }) => {
                 const note = row.original.debitNote;
@@ -503,8 +537,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'reason', 
+        {
+            accessorKey: 'reason',
             header: 'Reason',
             cell: ({ row }) => (
                 <div className="max-w-xs truncate" title={row.original.reason}>
@@ -527,18 +561,15 @@ export default () => {
 
     async function onSubmit(values: FormValues) {
         try {
-            console.log('📝 Form values:', values);
-            
+
             let billCopyAttachedUrl = '';
 
             if (values.billCopyAttached) {
                 try {
-                    console.log('📤 Uploading bill copy...');
                     billCopyAttachedUrl = await uploadFile({
                         file: values.billCopyAttached,
                         folderId: import.meta.env.VITE_BILL_COPY_FOLDER || import.meta.env.VITE_PRODUCT_PHOTO_FOLDER
                     });
-                    console.log('✅ Bill copy uploaded:', billCopyAttachedUrl);
                 } catch (uploadError) {
                     console.error('❌ Upload error:', uploadError);
                     toast.error('Failed to upload bill copy');
@@ -546,17 +577,7 @@ export default () => {
                 }
             }
 
-            const currentDateTime = new Date()
-                .toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-                .replace(',', '');
+            const currentDateTime = new Date().toISOString();
 
             const filteredData = storeInSheet.filter(
                 (s: StoreInSheetItem) => s.liftNumber === selectedItem?.liftNumber
@@ -568,26 +589,37 @@ export default () => {
                 return;
             }
 
-            const updateData = filteredData.map((prev: StoreInSheetItem) => ({
-                rowIndex: prev.rowIndex || 0,
-                actual7: currentDateTime,
-                status: values.status,
-                billCopyAttached: billCopyAttachedUrl,
-                sendDebitNote: values.debitNote,
-                reason: values.reason,
-            }));
+            const updateData = filteredData.map((prev: StoreInSheetItem) => {
+                const updatedRow: any = {
+                    rowIndex: prev.rowIndex || 0,
+                    liftNumber: prev.liftNumber,
+                    indentNo: prev.indentNo,
+                    actual7: currentDateTime,
+                    status: values.status,
+                    billCopyAttached: billCopyAttachedUrl,
+                    sendDebitNote: values.debitNote,
+                    reason: values.reason,
+                };
 
-            console.log('📤 Update data:', updateData);
+                // Set planned9 dynamically when debit note is marked as "Yes"
+                if (values.debitNote === 'Yes') {
+                    const plannedDate = new Date();
+                    plannedDate.setDate(plannedDate.getDate() + 2); // 2 days standard
+                    updatedRow.planned9 = plannedDate.toISOString().split('T')[0];
+                }
+
+                return updatedRow;
+            });
+
 
             await postToSheet(updateData, 'update', 'STORE IN');
 
-            console.log('✅ Update successful');
             toast.success(`Updated status for ${selectedItem?.liftNumber}`);
             setOpenDialog(false);
             setTimeout(() => updateAll(), 1000);
         } catch (error) {
             console.error('❌ Error in onSubmit:', error);
-            
+
             if (error instanceof Error) {
                 toast.error(`Failed to update: ${error.message}`);
             } else {
@@ -631,7 +663,7 @@ export default () => {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -645,7 +677,7 @@ export default () => {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -657,7 +689,7 @@ export default () => {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -672,39 +704,39 @@ export default () => {
                     </div>
                 </div>
 
-                {/* Main Content Card */}
-                <Card className="bg-white shadow-lg border-0 mb-6">
-                    <CardContent className="p-0">
-                        <Tabs defaultValue="pending" className="w-full" onValueChange={setActiveTab}>
-                            <div className="border-b">
-                                <TabsList className="h-14 bg-transparent px-6">
-                                    <TabsTrigger 
-                                        value="pending" 
-                                        className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-14 px-4"
-                                    >
-                                        <AlertCircle className="mr-2 h-4 w-4" />
-                                        Pending Items
-                                        {stats.pending > 0 && (
-                                            <span className="ml-2 bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                                                {stats.pending}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                    <TabsTrigger 
-                                        value="history" 
-                                        className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 rounded-none h-14 px-4"
-                                    >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        History
-                                        {(stats.accepted + stats.rejected) > 0 && (
-                                            <span className="ml-2 bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                                                {stats.accepted + stats.rejected}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                </TabsList>
-                            </div>
-                            
+                {/* Main Content */}
+                <Card className="bg-white shadow-lg border-0 overflow-hidden mb-6">
+                    <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                        <div className="bg-gray-50/50 border-b">
+                            <TabsList className="w-full max-w-md grid grid-cols-2 p-1 bg-gray-100/50 m-4 rounded-xl">
+                                <TabsTrigger
+                                    value="pending"
+                                    className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-red-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <AlertCircle size={16} className={activeTab === 'pending' ? 'text-red-500' : 'text-gray-400'} />
+                                    <span>Pending Items</span>
+                                    {stats.pending > 0 && (
+                                        <span className="ml-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                            {stats.pending}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="history"
+                                    className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-green-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <FileText size={16} className={activeTab === 'history' ? 'text-green-500' : 'text-gray-400'} />
+                                    <span>History</span>
+                                    {stats.accepted + stats.rejected > 0 && (
+                                        <span className="ml-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                            {stats.accepted + stats.rejected}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            </TabsList>
+                        </div>
+
+                        <CardContent className="p-0">
                             <div className="p-6">
                                 {/* PENDING TAB CONTENT */}
                                 <TabsContent value="pending" className="m-0">
@@ -724,7 +756,7 @@ export default () => {
                                         </div>
                                     )}
                                 </TabsContent>
-                                
+
                                 {/* HISTORY TAB CONTENT */}
                                 <TabsContent value="history" className="m-0">
                                     {historyData.length > 0 ? (
@@ -744,8 +776,8 @@ export default () => {
                                     )}
                                 </TabsContent>
                             </div>
-                        </Tabs>
-                    </CardContent>
+                        </CardContent>
+                    </Tabs>
                 </Card>
 
                 {/* Process Dialog */}
@@ -874,10 +906,10 @@ export default () => {
                                                     <FormItem>
                                                         <FormLabel className="font-medium">Reason *</FormLabel>
                                                         <FormControl>
-                                                            <Input 
-                                                                placeholder="Enter reason for accept/reject" 
+                                                            <Input
+                                                                placeholder="Enter reason for accept/reject"
                                                                 className="border-gray-300 focus:border-blue-500"
-                                                                {...field} 
+                                                                {...field}
                                                             />
                                                         </FormControl>
                                                         <FormMessage />
@@ -919,8 +951,8 @@ export default () => {
                                                 Cancel
                                             </Button>
                                         </DialogClose>
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             className={`${status === 'Reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} shadow-sm`}
                                             disabled={form.formState.isSubmitting}
                                         >

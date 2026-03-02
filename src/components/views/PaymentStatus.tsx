@@ -60,21 +60,20 @@ export default function PaymentHistory() {
 
       console.log(`AP-Payment Number from data: "${apPaymentNumber}"`);
 
-      // ✅ FIXED: Format timestamp from ISO to DD/MM/YYYY
+      // ✅ FIXED: Format timestamp from ISO to full Date & Time
       let formattedDate = '';
       if (timestamp) {
         try {
-          // Handle ISO format like "2025-11-05T07:32:27.109Z"
-          if (timestamp.includes('T')) {
-            const date = new Date(timestamp);
-            if (!isNaN(date.getTime())) {
-              const day = date.getDate().toString().padStart(2, '0');
-              const month = (date.getMonth() + 1).toString().padStart(2, '0');
-              const year = date.getFullYear();
-              formattedDate = `${day}/${month}/${year}`;
-            } else {
-              formattedDate = timestamp.split('T')[0]; // Fallback to just the date part
-            }
+          const date = new Date(timestamp);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toLocaleString('en-IN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            });
           } else {
             formattedDate = timestamp;
           }
@@ -111,10 +110,10 @@ export default function PaymentHistory() {
 
       console.log(`Processed record:`, result);
       return result;
-    }).filter(record => 
+    }).filter(record =>
       // Only include records that have some data
-      record.timestamp || 
-      record.uniqueNumber !== '-' || 
+      record.timestamp ||
+      record.uniqueNumber !== '-' ||
       record.payTo !== '-'
     );
 
@@ -149,7 +148,7 @@ export default function PaymentHistory() {
   const columns: ColumnDef<PaymentHistoryData>[] = [
     {
       accessorKey: 'timestamp',
-      header: 'Date',
+      header: 'Timestamp',
       cell: ({ getValue }) => {
         const value = getValue() as string;
         return (
@@ -211,16 +210,15 @@ export default function PaymentHistory() {
       cell: ({ getValue }) => {
         const status = ((getValue() as string) || 'Yes').toLowerCase();
         const isPaid = status === 'yes';
-        
+
         return (
           <div className="px-2">
             <Badge
               variant={isPaid ? "default" : "outline"}
-              className={`inline-flex items-center gap-1 ${
-                isPaid
+              className={`inline-flex items-center gap-1 ${isPaid
                   ? 'bg-green-100 text-green-800 hover:bg-green-100'
                   : 'bg-amber-100 text-amber-800 hover:bg-amber-100'
-              }`}
+                }`}
             >
               {isPaid ? (
                 <CheckCircle className="h-3 w-3" />
@@ -257,11 +255,11 @@ export default function PaymentHistory() {
       header: 'Attachment',
       cell: ({ getValue }) => {
         const attachmentUrl = getValue() as string;
-        const isValidUrl = attachmentUrl && 
-                          attachmentUrl.trim() !== '' && 
-                          attachmentUrl !== '-' && 
-                          attachmentUrl.startsWith('http');
-        
+        const isValidUrl = attachmentUrl &&
+          attachmentUrl.trim() !== '' &&
+          attachmentUrl !== '-' &&
+          attachmentUrl.startsWith('http');
+
         return (
           <div className="px-2">
             {isValidUrl ? (
@@ -324,7 +322,7 @@ export default function PaymentHistory() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
@@ -338,7 +336,7 @@ export default function PaymentHistory() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
@@ -356,7 +354,7 @@ export default function PaymentHistory() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
@@ -400,8 +398,8 @@ export default function PaymentHistory() {
                 <Receipt className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-700 mb-2">No Payment Records Found</h3>
                 <p className="text-gray-500 mb-6">There are no payment history records available.</p>
-                <Button 
-                  onClick={handleRefresh} 
+                <Button
+                  onClick={handleRefresh}
                   variant="outline"
                   className="border-gray-300"
                 >
@@ -422,7 +420,7 @@ export default function PaymentHistory() {
         </Card>
 
         {/* Information Card */}
-       
+
       </div>
     </div>
   );

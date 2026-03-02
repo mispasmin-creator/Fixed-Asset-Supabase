@@ -71,9 +71,6 @@ export default () => {
     const { indentSheet, indentLoading, updateIndentSheet } = useSheets();
     const { user } = useAuth();
 
-    console.log("user.firmNameMatch:", user.firmNameMatch);
-    console.log("user object:", user);
-
     const [selectedIndent, setSelectedIndent] = useState<ApproveTableData | null>(null);
     const [tableData, setTableData] = useState<ApproveTableData[]>([]);
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
@@ -84,16 +81,16 @@ export default () => {
 
     // Fetching table data
     useEffect(() => {
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
         setTableData(
             filteredByFirm
                 .filter(
                     (sheet) =>
+                        sheet.planned1 &&
                         sheet.planned1 !== '' &&
-                        sheet.actual1 === '' 
+                        !sheet.actual1
                 )
                 .map((sheet) => ({
                     indentNo: sheet.indentNumber,
@@ -115,16 +112,17 @@ export default () => {
     }, [indentSheet, user.firmNameMatch]);
 
     useEffect(() => {
-        const filteredByFirm = indentSheet.filter(sheet => 
+        const filteredByFirm = indentSheet.filter(sheet =>
             user.firmNameMatch.toLowerCase() === "all" || sheet.firmName === user.firmNameMatch
         );
-        
+
         setHistoryData(
             filteredByFirm
                 .filter(
                     (sheet) =>
+                        sheet.planned1 &&
                         sheet.planned1 !== '' &&
-                        sheet.actual1 !== '' 
+                        sheet.actual1
                 )
                 .map((sheet) => ({
                     indentNo: sheet.indentNumber,
@@ -137,7 +135,7 @@ export default () => {
                     uom: sheet.uom,
                     specifications: sheet.specifications || '',
                     date: formatDate(new Date(sheet.timestamp)),
-                    approvedDate: formatDate(new Date(sheet.actual1)),
+                    approvedDate: formatDate(new Date(sheet.actual1)) || "-",
                     indentStatus: sheet.indentStatus || '',
                     noDay: sheet.noDay || 0,
                     planned1: sheet.planned1,
@@ -202,6 +200,7 @@ export default () => {
                     .filter((s) => s.indentNumber === indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         approvedQuantity: editValues.approvedQuantity,
                         uom: editValues.uom,
                         vendorType: editValues.vendorType,
@@ -250,8 +249,8 @@ export default () => {
                 },
             ]
             : []),
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="text-center font-semibold text-blue-700">
@@ -259,8 +258,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -269,8 +268,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indenter', 
+        {
+            accessorKey: 'indenter',
             header: 'Indenter',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -279,8 +278,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'department', 
+        {
+            accessorKey: 'department',
             header: 'Department',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -299,8 +298,8 @@ export default () => {
                 </div>
             ),
         },
-        { 
-            accessorKey: 'quantity', 
+        {
+            accessorKey: 'quantity',
             header: 'Quantity',
             cell: ({ getValue }) => (
                 <div className="text-center font-semibold">
@@ -308,8 +307,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'uom', 
+        {
+            accessorKey: 'uom',
             header: 'UOM',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -359,7 +358,7 @@ export default () => {
                                 className="border-2 border-green-500 rounded-lg text-center"
                             />
                         ) : (
-                            <div 
+                            <div
                                 className="break-words whitespace-normal cursor-pointer p-2 hover:bg-green-50 rounded-lg text-center border-2 border-transparent hover:border-green-200 transition-all"
                                 onClick={handleFocus}
                                 onFocus={handleFocus}
@@ -424,8 +423,8 @@ export default () => {
                 const attachment = row.original.attachment;
                 return attachment ? (
                     <div className="flex justify-center">
-                        <a 
-                            href={attachment} 
+                        <a
+                            href={attachment}
                             target="_blank"
                             className="text-blue-600 hover:text-blue-800 font-semibold underline"
                         >
@@ -438,8 +437,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'date', 
+        {
+            accessorKey: 'date',
             header: 'Date',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -462,8 +461,8 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<HistoryData>[] = [
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="text-center font-semibold text-blue-700">
@@ -471,8 +470,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -481,8 +480,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indenter', 
+        {
+            accessorKey: 'indenter',
             header: 'Indenter',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -491,8 +490,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'department', 
+        {
+            accessorKey: 'department',
             header: 'Department',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -602,7 +601,7 @@ export default () => {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Regular Vendor">Regular</SelectItem>
-                                    <SelectItem value="New Vendor">New Vendor</SelectItem>
+                                    <SelectItem value="Three Party">Three Party</SelectItem>
                                     <SelectItem value="Reject">Reject</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -658,8 +657,8 @@ export default () => {
                 </div>
             ),
         },
-        { 
-            accessorKey: 'date', 
+        {
+            accessorKey: 'date',
             header: 'Request Date',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -668,8 +667,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'approvedDate', 
+        {
+            accessorKey: 'approvedDate',
             header: 'Approval Date',
             cell: ({ getValue }) => (
                 <div className="text-center">
@@ -768,6 +767,7 @@ export default () => {
                     .filter((s) => s.indentNumber === selectedIndent?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         vendorType: values.approval,
                         approvedQuantity: values.approvedQuantity,
                         actual1: new Date().toISOString(),
@@ -813,13 +813,13 @@ export default () => {
                         >
                             <ClipboardCheck size={50} className="text-green-600" />
                         </Heading>
-                        
+
                         <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-6">
                             <TabsContent value="pending" className="mt-0">
                                 <DataTable
                                     data={tableData}
                                     columns={columns}
-                                    searchFields={['product', 'department', 'indenter', 'vendorType','firmNameMatch']}
+                                    searchFields={['product', 'department', 'indenter', 'vendorType', 'firmNameMatch']}
                                     dataLoading={indentLoading}
                                     extraActions={
                                         <Button
@@ -832,7 +832,7 @@ export default () => {
                                     }
                                 />
                             </TabsContent>
-                            
+
                             <TabsContent value="history" className="mt-0">
                                 <DataTable
                                     data={historyData}
@@ -912,19 +912,19 @@ export default () => {
                                             )}
                                         />
                                     </div>
-                                    
+
                                     <DialogFooter className="flex justify-center gap-4">
                                         <DialogClose asChild>
-                                            <Button 
-                                                variant="outline" 
+                                            <Button
+                                                variant="outline"
                                                 className="border-2 border-gray-300 rounded-xl px-8 py-3 text-lg font-semibold"
                                             >
                                                 Close
                                             </Button>
                                         </DialogClose>
 
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             disabled={form.formState.isSubmitting}
                                             className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl px-8 py-3 text-lg font-semibold border-0"
                                         >

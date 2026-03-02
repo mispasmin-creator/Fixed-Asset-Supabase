@@ -19,29 +19,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        setLoading(true);
         const stored = localStorage.getItem('auth');
-        if (stored) {
-            try {
-                const { username } = JSON.parse(stored);
-                fetchSheet('USER').then((res) => {
-                    const user = (res as UserPermissions[]).find((user) => user.username === username);
+        if (!stored) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(stored);
+            const { username, password, user: storedUser } = parsed;
+
+            // ── Immediately restore session from localStorage so there is no
+            //    login-page flash on reload while the background check runs. ──
+            if (storedUser) {
+                setUserPermissions(storedUser);
+                setLoggedIn(true);
+            }
+            setLoading(false);
+
+            // ── Background re-validation against Supabase ──────────────────
+            // If credentials are no longer valid the user will be logged out.
+            // If there is a network/fetch error we keep the existing session
+            // alive (do NOT wipe localStorage) — this prevents reload from
+            // logging the user out when Supabase is temporarily unreachable.
+            fetchSheet('USER')
+                .then((res) => {
+                    const user = (res as UserPermissions[]).find(
+                        (u) => u.username === username && u.password === password
+                    );
                     if (user) {
+                        // Refresh stored user data in case permissions changed
                         setUserPermissions(user);
                         setLoggedIn(true);
+                        localStorage.setItem('auth', JSON.stringify({ username, password, user }));
+                    } else {
+                        // Credentials are no longer valid — force logout
+                        localStorage.removeItem('auth');
+                        setLoggedIn(false);
+                        setUserPermissions(null);
                     }
-                    setLoading(false);
-                }).catch((error) => {
-                    console.error('Error fetching user data:', error);
-                    localStorage.removeItem('auth');
-                    setLoading(false);
+                })
+                .catch((error) => {
+                    // Network/Supabase error — keep the existing session alive
+                    console.warn('Background auth re-validation failed (keeping session):', error);
                 });
-            } catch (error) {
-                console.error('Error parsing stored auth data:', error);
-                localStorage.removeItem('auth');
-                setLoading(false);
-            }
-        } else {
+        } catch (error) {
+            console.error('Error parsing stored auth data:', error);
+            localStorage.removeItem('auth');
             setLoading(false);
         }
     }, []);
@@ -54,7 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 return false;
             }
 
-            localStorage.setItem('auth', JSON.stringify({ username }));
+            localStorage.setItem('auth', JSON.stringify({ username, password, user }));
             setUserPermissions(user);
             setLoggedIn(true);
             return true;
@@ -74,12 +98,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const defaultUser: UserPermissions = userPermissions || {} as UserPermissions;
 
     return (
-        <AuthContext.Provider value={{ 
-            login, 
-            loggedIn, 
-            logout, 
-            user: defaultUser, 
-            loading 
+        <AuthContext.Provider value={{
+            login,
+            loggedIn,
+            logout,
+            user: defaultUser,
+            loading
         }}>
             {children}
             <Toaster expand richColors theme="light" closeButton />

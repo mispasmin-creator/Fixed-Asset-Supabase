@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { postToSheet, uploadFile } from '@/lib/fetchers';
-import { Truck, Package, Upload, MapPin, Car, Receipt, DollarSign } from 'lucide-react';
+import { Truck, Package, Upload, MapPin, Car, Receipt, DollarSign, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
@@ -38,10 +38,46 @@ interface FullkittingData {
     transporterName: string;
     amount: number;
     firmNameMatch: string;
+    timestamp: string;
+    planned: string;
 }
 
 export default function FullKitting() {
     const { fullkittingSheet, fullkittingLoading, updateFullkittingSheet } = useSheets();
+
+    const formatDateTime = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            const time = date.toLocaleString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            return `${d}/${m}/${y} ${time}`;
+        } catch {
+            return isoString;
+        }
+    };
+
+    const formatDateTiny = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            return `${d}/${m}/${y}`;
+        } catch {
+            return isoString;
+        }
+    };
+
     const [tableData, setTableData] = useState<FullkittingData[]>([]);
     const [selectedItem, setSelectedItem] = useState<FullkittingData | null>(null);
     const [openDialog, setOpenDialog] = useState(false);
@@ -56,7 +92,7 @@ export default function FullKitting() {
     });
 
     useEffect(() => {
-        const filteredByFirm = fullkittingSheet.filter(item => 
+        const filteredByFirm = fullkittingSheet.filter(item =>
             user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
 
@@ -74,6 +110,8 @@ export default function FullKitting() {
                 transporterName: item.transporterName || '',
                 amount: item.amount || 0,
                 firmNameMatch: item.firmNameMatch || '',
+                timestamp: item.timestamp || '',
+                planned: item.planned || '',
             }))
         );
 
@@ -84,10 +122,6 @@ export default function FullKitting() {
         });
     }, [fullkittingSheet, user.firmNameMatch]);
 
-    useEffect(() => {
-        console.log("Master Sheet:", masterSheet);
-        console.log("FMS Names:", masterSheet?.fmsNames);
-    }, [masterSheet]);
 
     const columns: ColumnDef<FullkittingData>[] = [
         {
@@ -110,15 +144,39 @@ export default function FullKitting() {
                 );
             },
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'timestamp',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm text-gray-600">{formatDateTime(row.original.timestamp)}</span>
+            )
+        },
+        {
+            accessorKey: 'planned',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm">{formatDateTiny(row.original.planned)}</span>
+            )
+        },
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium text-blue-700">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -126,36 +184,36 @@ export default function FullKitting() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.productName}</span>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Quantity',
             cell: ({ row }) => (
                 <span className="font-semibold text-gray-800">{row.original.qty}</span>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <span className="font-medium text-gray-700">{row.original.billNo}</span>
             )
         },
-        { 
-            accessorKey: 'transportingInclude', 
+        {
+            accessorKey: 'transportingInclude',
             header: 'Transport',
             cell: ({ row }) => {
                 const hasTransport = row.original.transportingInclude === 'Yes';
@@ -166,12 +224,12 @@ export default function FullKitting() {
                 );
             }
         },
-        { 
-            accessorKey: 'transporterName', 
+        {
+            accessorKey: 'transporterName',
             header: 'Transporter'
         },
-        { 
-            accessorKey: 'amount', 
+        {
+            accessorKey: 'amount',
             header: 'Amount',
             cell: ({ row }) => (
                 <span className="font-semibold text-green-600">₹{row.original.amount?.toFixed(2)}</span>
@@ -243,6 +301,7 @@ export default function FullKitting() {
                     .filter((s) => s.indentNumber === selectedItem?.indentNumber)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
+                        indentNumber: prev.indentNumber,
                         actual: currentDateTime,
                         fmsName: values.fmsName,
                         status: values.status,
@@ -303,7 +362,7 @@ export default function FullKitting() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -317,7 +376,7 @@ export default function FullKitting() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -422,8 +481,8 @@ export default function FullKitting() {
                                                             <Truck className="h-4 w-4" />
                                                             FMS Name
                                                         </FormLabel>
-                                                        <Select 
-                                                            onValueChange={field.onChange} 
+                                                        <Select
+                                                            onValueChange={field.onChange}
                                                             value={field.value}
                                                             defaultValue="Store Fms"
                                                         >
@@ -481,10 +540,10 @@ export default function FullKitting() {
                                                             Vehicle Number
                                                         </FormLabel>
                                                         <FormControl>
-                                                            <Input 
-                                                                placeholder="Enter vehicle number" 
+                                                            <Input
+                                                                placeholder="Enter vehicle number"
                                                                 className="border-gray-300 focus:border-blue-500"
-                                                                {...field} 
+                                                                {...field}
                                                             />
                                                         </FormControl>
                                                         <FormMessage />
@@ -526,10 +585,10 @@ export default function FullKitting() {
                                                             From Location
                                                         </FormLabel>
                                                         <FormControl>
-                                                            <Input 
-                                                                placeholder="Enter source location" 
+                                                            <Input
+                                                                placeholder="Enter source location"
                                                                 className="border-gray-300 focus:border-blue-500"
-                                                                {...field} 
+                                                                {...field}
                                                             />
                                                         </FormControl>
                                                         <FormMessage />
@@ -547,10 +606,10 @@ export default function FullKitting() {
                                                             To Location
                                                         </FormLabel>
                                                         <FormControl>
-                                                            <Input 
-                                                                placeholder="Enter destination location" 
+                                                            <Input
+                                                                placeholder="Enter destination location"
                                                                 className="border-gray-300 focus:border-blue-500"
-                                                                {...field} 
+                                                                {...field}
                                                             />
                                                         </FormControl>
                                                         <FormMessage />
@@ -660,17 +719,17 @@ export default function FullKitting() {
 
                                     <DialogFooter className="gap-2">
                                         <DialogClose asChild>
-                                            <Button 
-                                                type="button" 
-                                                variant="outline" 
+                                            <Button
+                                                type="button"
+                                                variant="outline"
                                                 className="border-gray-300"
                                                 disabled={isSubmitting}
                                             >
                                                 Cancel
                                             </Button>
                                         </DialogClose>
-                                        <Button 
-                                            type="submit" 
+                                        <Button
+                                            type="submit"
                                             className="bg-blue-600 hover:bg-blue-700 shadow-sm"
                                             disabled={isSubmitting}
                                         >

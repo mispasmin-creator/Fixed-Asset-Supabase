@@ -18,6 +18,7 @@ import { ClipboardList, Trash, Search, Plus, FileText } from 'lucide-react';
 import { postToSheet, uploadFile } from '@/lib/fetchers';
 import type { IndentSheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
+import { BUCKETS } from '@/lib/services';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
 
@@ -29,7 +30,7 @@ export default () => {
     const [searchTermProductName, setSearchTermProductName] = useState('');
     const [searchTermUOM, setSearchTermUOM] = useState('');
     const [searchTermFirmName, setSearchTermFirmName] = useState('');
-    
+
     useEffect(() => {
         setIndentSheet(sheet);
     }, [sheet]);
@@ -123,16 +124,20 @@ export default () => {
                     quantity: product.quantity,
                     uom: product.uom,
                     firmName: product.firmName,
+                    firmNameMatch: product.firmName,
                     specifications: product.specifications || '',
                     indentStatus: data.indentStatus,
                     noDay: product.numberOfDays,
+                    status: 'Pending',
+                    liftingStatus: 'Pending',
                 };
 
                 if (product.attachment && product.attachment instanceof File) {
                     try {
                         row.attachment = await uploadFile({
                             file: product.attachment,
-                            folderId: import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER
+                            folderId: import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER,
+                            bucket: BUCKETS.INDENTS
                         });
                     } catch (uploadError) {
                         console.error('File upload failed:', uploadError);
@@ -183,7 +188,7 @@ export default () => {
                 <Heading heading="Indent Form" subtext="Create new Indent">
                     <ClipboardList size={50} className="text-green-600" />
                 </Heading>
-                
+
                 <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 overflow-hidden">
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-8 p-8">
@@ -198,9 +203,9 @@ export default () => {
                                                 Indenter Name *
                                             </FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    placeholder="Enter Indenter name" 
-                                                    {...field} 
+                                                <Input
+                                                    placeholder="Enter Indenter name"
+                                                    {...field}
                                                     className="h-12 text-lg border-2 border-gray-300 rounded-xl focus:border-green-500 transition-colors"
                                                 />
                                             </FormControl>
@@ -288,7 +293,7 @@ export default () => {
                                                     <Trash size={18} />
                                                 </Button>
                                             </div>
-                                            
+
                                             <div className="grid gap-6">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {/* Department */}

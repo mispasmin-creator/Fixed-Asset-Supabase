@@ -393,7 +393,6 @@ export default () => {
                 }
             ];
 
-            console.log('Mapped data to post:', mappedData);
 
             await postToSheet(mappedData, 'update', 'STORE IN');
 

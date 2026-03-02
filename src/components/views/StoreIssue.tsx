@@ -103,7 +103,6 @@ export default () => {
 
             const nextIssueNumber = getNextIssueNumber(issueSheet || []);
 
-            // console.log('nextIssueNumber', nextIssueNumber);
 
             const rows: Partial<IssueSheet>[] = [];
             for (const product of data.products) {
@@ -140,17 +139,14 @@ export default () => {
                 ],
             });
         } catch (error) {
-            console.error('Error in onSubmit:', error);
             toast.error('Error while creating issue! Please try again');
         }
     }
 
-    function onError(e: any) {
-        console.log(e);
+    function onError() {
         toast.error('Please fill all required fields');
     }
 
-    // console.log('fields', fields);
 
     return (
         <div>

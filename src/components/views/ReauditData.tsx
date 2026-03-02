@@ -35,17 +35,17 @@ interface TallyEntryPendingData {
     productName: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
-    billImage: string;
+    billImage: string[];
     billReceivedLater: string;
     notReceivedBillNo: string;
     location: string;
     typeOfBills: string;
-    productImage: string;
+    productImage: string[];
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -64,17 +64,17 @@ interface TallyEntryHistoryData {
     productName: string;
     billNo: string;
     qty: number;
-    partyName: string;
+    vendorName: string;
     billAmt: number;
-    billImage: string;
+    billImage: string[];
     billReceivedLater: string;
     notReceivedBillNo: string;
     location: string;
     typeOfBills: string;
-    productImage: string;
+    productImage: string[];
     area: string;
     indentedFor: string;
-    approvedPartyName: string;
+    approvedVendorName: string;
     rate: number;
     indentQty: number;
     totalRate: number;
@@ -98,10 +98,10 @@ export default () => {
     const [activeTab, setActiveTab] = useState('pending');
 
     useEffect(() => {
-        const filteredByFirm = tallyEntrySheet.filter(item => 
+        const filteredByFirm = tallyEntrySheet.filter(item =>
             user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
-        
+
         setPendingData(
             filteredByFirm
                 .filter((i) => i.planned3 !== '' && i.actual3 === '')
@@ -113,17 +113,17 @@ export default () => {
                     productName: i.productName || '',
                     billNo: i.billNo || '',
                     qty: i.qty || 0,
-                    partyName: i.partyName || '',
+                    vendorName: i.vendorName || '',
                     billAmt: i.billAmt || 0,
-                    billImage: i.billImage || '',
-                    billReceivedLater: i.billReceivedLater || '',
+                    billImage: Array.isArray(i.billImage) ? i.billImage : (i.billImage ? [i.billImage] : []),
+                    billReceivedLater: (i.billReceivedLater || '').toString(),
                     notReceivedBillNo: i.notReceivedBillNo || '',
                     location: i.location || '',
                     typeOfBills: i.typeOfBills || '',
-                    productImage: i.productImage || '',
+                    productImage: Array.isArray(i.productImage) ? i.productImage : (i.productImage ? [i.productImage] : []),
                     area: i.area || '',
                     indentedFor: i.indentedFor || '',
-                    approvedPartyName: i.approvedPartyName || '',
+                    approvedVendorName: i.approvedVendorName || '',
                     rate: i.rate || 0,
                     indentQty: i.indentQty || 0,
                     totalRate: i.totalRate || 0,
@@ -137,10 +137,10 @@ export default () => {
     }, [tallyEntrySheet, user.firmNameMatch]);
 
     useEffect(() => {
-        const filteredByFirm = tallyEntrySheet.filter(item => 
+        const filteredByFirm = tallyEntrySheet.filter(item =>
             user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
-        
+
         setHistoryData(
             filteredByFirm
                 .filter((i) => i.planned3 !== '' && i.actual3 !== '')
@@ -152,17 +152,17 @@ export default () => {
                     productName: i.productName || '',
                     billNo: i.billNo || '',
                     qty: i.qty || 0,
-                    partyName: i.partyName || '',
+                    vendorName: i.vendorName || '',
                     billAmt: i.billAmt || 0,
-                    billImage: i.billImage || '',
-                    billReceivedLater: i.billReceivedLater || '',
+                    billImage: Array.isArray(i.billImage) ? i.billImage : (i.billImage ? [i.billImage] : []),
+                    billReceivedLater: (i.billReceivedLater || '').toString(),
                     notReceivedBillNo: i.notReceivedBillNo || '',
                     location: i.location || '',
                     typeOfBills: i.typeOfBills || '',
-                    productImage: i.productImage || '',
+                    productImage: Array.isArray(i.productImage) ? i.productImage : (i.productImage ? [i.productImage] : []),
                     area: i.area || '',
                     indentedFor: i.indentedFor || '',
-                    approvedPartyName: i.approvedPartyName || '',
+                    approvedVendorName: i.approvedVendorName || '',
                     rate: i.rate || 0,
                     indentQty: i.indentQty || 0,
                     totalRate: i.totalRate || 0,
@@ -194,30 +194,30 @@ export default () => {
     const pendingColumns: ColumnDef<TallyEntryPendingData>[] = [
         ...(user.receiveItemView
             ? [
-                  {
-                      header: 'Action',
-                      cell: ({ row }: { row: Row<TallyEntryPendingData> }) => {
-                          return (
-                              <div className="flex justify-center">
-                                  <DialogTrigger asChild>
-                                      <Button
-                                          variant="outline"
-                                          onClick={() => {
-                                              setSelectedItem(row.original);
-                                          }}
-                                          className="min-w-[100px]"
-                                      >
-                                          Process
-                                      </Button>
-                                  </DialogTrigger>
-                              </div>
-                          );
-                      },
-                  },
-              ]
+                {
+                    header: 'Action',
+                    cell: ({ row }: { row: Row<TallyEntryPendingData> }) => {
+                        return (
+                            <div className="flex justify-center">
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setSelectedItem(row.original);
+                                        }}
+                                        className="min-w-[100px]"
+                                    >
+                                        Process
+                                    </Button>
+                                </DialogTrigger>
+                            </div>
+                        );
+                    },
+                },
+            ]
             : []),
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -225,8 +225,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentDate', 
+        {
+            accessorKey: 'indentDate',
             header: 'Indent Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -234,8 +234,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'purchaseDate', 
+        {
+            accessorKey: 'purchaseDate',
             header: 'Purchase Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -243,8 +243,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'materialInDate', 
+        {
+            accessorKey: 'materialInDate',
             header: 'Material In Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -252,8 +252,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -261,8 +261,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -270,8 +270,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -279,8 +279,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -288,17 +288,17 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'partyName', 
-            header: 'Party Name',
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
             cell: ({ row }) => (
                 <div className="text-center">
-                    {row.original.partyName}
+                    {row.original.vendorName}
                 </div>
             )
         },
-        { 
-            accessorKey: 'billAmt', 
+        {
+            accessorKey: 'billAmt',
             header: 'Bill Amt',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -310,13 +310,15 @@ export default () => {
             accessorKey: 'billImage',
             header: 'Bill Image',
             cell: ({ row }) => {
-                const image = row.original.billImage;
+                const images = row.original.billImage;
                 return (
-                    <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                    <div className="flex flex-wrap justify-center gap-1">
+                        {images.length > 0 ? (
+                            images.map((img, idx) => (
+                                <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs bg-primary/10 px-1 rounded">
+                                    View {images.length > 1 ? idx + 1 : ''}
+                                </a>
+                            ))
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -324,8 +326,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'billReceivedLater', 
+        {
+            accessorKey: 'billReceivedLater',
             header: 'Bill Received Later',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -333,8 +335,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'notReceivedBillNo', 
+        {
+            accessorKey: 'notReceivedBillNo',
             header: 'Not Received Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -342,8 +344,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'location', 
+        {
+            accessorKey: 'location',
             header: 'Location',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -351,8 +353,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'typeOfBills', 
+        {
+            accessorKey: 'typeOfBills',
             header: 'Type Of Bills',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -364,13 +366,15 @@ export default () => {
             accessorKey: 'productImage',
             header: 'Product Image',
             cell: ({ row }) => {
-                const image = row.original.productImage;
+                const images = row.original.productImage;
                 return (
-                    <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                    <div className="flex flex-wrap justify-center gap-1">
+                        {images.length > 0 ? (
+                            images.map((img, idx) => (
+                                <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs bg-primary/10 px-1 rounded">
+                                    View {images.length > 1 ? idx + 1 : ''}
+                                </a>
+                            ))
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -378,8 +382,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'area', 
+        {
+            accessorKey: 'area',
             header: 'Area',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -387,26 +391,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentedFor', 
-            header: 'Indented For',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.indentedFor}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'approvedPartyName', 
-            header: 'Approved Party Name',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.approvedPartyName}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'rate', 
+        {
+            accessorKey: 'rate',
             header: 'Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -414,8 +400,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentQty', 
+        {
+            accessorKey: 'indentQty',
             header: 'Indent Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -423,8 +409,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'totalRate', 
+        {
+            accessorKey: 'totalRate',
             header: 'Total Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -432,8 +418,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status1', 
+        {
+            accessorKey: 'status1',
             header: 'Status 1',
             cell: ({ row }) => {
                 const status = row.original.status1;
@@ -447,8 +433,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks1', 
+        {
+            accessorKey: 'remarks1',
             header: 'Remarks 1',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -456,8 +442,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status2', 
+        {
+            accessorKey: 'status2',
             header: 'Status 2',
             cell: ({ row }) => {
                 const status = row.original.status2;
@@ -471,8 +457,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks2', 
+        {
+            accessorKey: 'remarks2',
             header: 'Remarks 2',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -483,8 +469,8 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<TallyEntryHistoryData>[] = [
-        { 
-            accessorKey: 'indentNo', 
+        {
+            accessorKey: 'indentNo',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -492,8 +478,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentDate', 
+        {
+            accessorKey: 'indentDate',
             header: 'Indent Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -501,8 +487,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -510,8 +496,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'purchaseDate', 
+        {
+            accessorKey: 'purchaseDate',
             header: 'Purchase Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -519,8 +505,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'materialInDate', 
+        {
+            accessorKey: 'materialInDate',
             header: 'Material In Date',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -528,8 +514,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'productName', 
+        {
+            accessorKey: 'productName',
             header: 'Product Name',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -537,8 +523,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'billNo', 
+        {
+            accessorKey: 'billNo',
             header: 'Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -546,8 +532,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'qty', 
+        {
+            accessorKey: 'qty',
             header: 'Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -555,17 +541,17 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'partyName', 
-            header: 'Party Name',
+        {
+            accessorKey: 'vendorName',
+            header: 'Vendor Name',
             cell: ({ row }) => (
                 <div className="text-center">
-                    {row.original.partyName}
+                    {row.original.vendorName}
                 </div>
             )
         },
-        { 
-            accessorKey: 'billAmt', 
+        {
+            accessorKey: 'billAmt',
             header: 'Bill Amt',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -577,13 +563,15 @@ export default () => {
             accessorKey: 'billImage',
             header: 'Bill Image',
             cell: ({ row }) => {
-                const image = row.original.billImage;
+                const images = row.original.billImage;
                 return (
-                    <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                    <div className="flex flex-wrap justify-center gap-1">
+                        {images.length > 0 ? (
+                            images.map((img, idx) => (
+                                <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs bg-primary/10 px-1 rounded">
+                                    View {images.length > 1 ? idx + 1 : ''}
+                                </a>
+                            ))
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -591,8 +579,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'billReceivedLater', 
+        {
+            accessorKey: 'billReceivedLater',
             header: 'Bill Received Later',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -600,8 +588,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'notReceivedBillNo', 
+        {
+            accessorKey: 'notReceivedBillNo',
             header: 'Not Received Bill No.',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -609,8 +597,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'location', 
+        {
+            accessorKey: 'location',
             header: 'Location',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -618,8 +606,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'typeOfBills', 
+        {
+            accessorKey: 'typeOfBills',
             header: 'Type Of Bills',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -631,13 +619,15 @@ export default () => {
             accessorKey: 'productImage',
             header: 'Product Image',
             cell: ({ row }) => {
-                const image = row.original.productImage;
+                const images = row.original.productImage;
                 return (
-                    <div className="text-center">
-                        {image ? (
-                            <a href={image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                View
-                            </a>
+                    <div className="flex flex-wrap justify-center gap-1">
+                        {images.length > 0 ? (
+                            images.map((img, idx) => (
+                                <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs bg-primary/10 px-1 rounded">
+                                    View {images.length > 1 ? idx + 1 : ''}
+                                </a>
+                            ))
                         ) : (
                             <span className="text-gray-400">-</span>
                         )}
@@ -645,8 +635,8 @@ export default () => {
                 );
             },
         },
-        { 
-            accessorKey: 'area', 
+        {
+            accessorKey: 'area',
             header: 'Area',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -654,26 +644,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentedFor', 
-            header: 'Indented For',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.indentedFor}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'approvedPartyName', 
-            header: 'Approved Party Name',
-            cell: ({ row }) => (
-                <div className="text-center">
-                    {row.original.approvedPartyName}
-                </div>
-            )
-        },
-        { 
-            accessorKey: 'rate', 
+        {
+            accessorKey: 'rate',
             header: 'Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -681,8 +653,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'indentQty', 
+        {
+            accessorKey: 'indentQty',
             header: 'Indent Qty',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -690,8 +662,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'totalRate', 
+        {
+            accessorKey: 'totalRate',
             header: 'Total Rate',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -699,8 +671,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status1', 
+        {
+            accessorKey: 'status1',
             header: 'Status',
             cell: ({ row }) => {
                 const status = row.original.status1;
@@ -714,8 +686,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks1', 
+        {
+            accessorKey: 'remarks1',
             header: 'Remarks',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -723,8 +695,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status2', 
+        {
+            accessorKey: 'status2',
             header: 'Status 2',
             cell: ({ row }) => {
                 const status = row.original.status2;
@@ -738,8 +710,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks2', 
+        {
+            accessorKey: 'remarks2',
             header: 'Remarks 2',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -747,8 +719,8 @@ export default () => {
                 </div>
             )
         },
-        { 
-            accessorKey: 'status3', 
+        {
+            accessorKey: 'status3',
             header: 'Status 3',
             cell: ({ row }) => {
                 const status = row.original.status3;
@@ -762,8 +734,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'remarks3', 
+        {
+            accessorKey: 'remarks3',
             header: 'Remarks 3',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -804,24 +776,17 @@ export default () => {
 
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
-            const currentDateTime = new Date()
-                .toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                })
-                .replace(',', '');
+            const currentDateTime = new Date().toISOString();
+            const updateDateStr = currentDateTime.split('T')[0];
 
             await postToSheet(
                 tallyEntrySheet
                     .filter((s) => s.indentNo === selectedItem?.indentNo)
                     .map((prev) => ({
                         rowIndex: prev.rowIndex,
-                        actual3: currentDateTime,
+                        indentNumber: prev.indentNumber,
+                        liftNumber: prev.liftNumber,
+                        actual3: updateDateStr,
                         status3: values.status3,
                         remarks3: values.remarks3,
                     })),
@@ -863,7 +828,7 @@ export default () => {
                                         </p>
                                     </div>
                                 </div>
-                                
+
                                 {/* Stats Cards */}
                                 <div className="flex gap-4">
                                     <div className="bg-white p-4 rounded-xl shadow-sm border min-w-[140px]">
@@ -884,96 +849,96 @@ export default () => {
                             {/* Tabs */}
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                                    <div className="border-b px-6">
-                                        <TabsList className="bg-transparent p-0 h-auto">
-                                            <TabsTrigger 
-                                                value="pending" 
-                                                className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none px-6 py-3"
+                                    <div className="bg-gray-50/50 border-b">
+                                        <TabsList className="w-full max-w-md grid grid-cols-2 p-1 bg-gray-100/50 m-4 rounded-xl">
+                                            <TabsTrigger
+                                                value="pending"
+                                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-amber-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <span className="flex items-center gap-2">
-                                                    <span>Pending Reaudit</span>
-                                                    {pendingData.length > 0 && (
-                                                        <Badge variant="secondary" className="ml-2">
-                                                            {pendingData.length}
-                                                        </Badge>
-                                                    )}
-                                                </span>
+                                                <span>Pending Reaudit</span>
+                                                {pendingData.length > 0 && (
+                                                    <span className="ml-1 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                        {pendingData.length}
+                                                    </span>
+                                                )}
                                             </TabsTrigger>
-                                            <TabsTrigger 
-                                                value="history" 
-                                                className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none px-6 py-3"
+                                            <TabsTrigger
+                                                value="history"
+                                                className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-green-700 h-10 px-4 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <span className="flex items-center gap-2">
-                                                    <span>Reaudit History</span>
-                                                    {historyData.length > 0 && (
-                                                        <Badge variant="outline" className="ml-2">
-                                                            {historyData.length}
-                                                        </Badge>
-                                                    )}
-                                                </span>
+                                                <span>Reaudit History</span>
+                                                {historyData.length > 0 && (
+                                                    <span className="ml-1 bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                        {historyData.length}
+                                                    </span>
+                                                )}
                                             </TabsTrigger>
                                         </TabsList>
                                     </div>
 
-                                    <div className="p-6">
-                                        <TabsContent value="pending" className="mt-0">
-                                            <div className="mb-4">
-                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                    <div>
-                                                        <h3 className="text-lg font-semibold">
-                                                            Pending Reaudit Entries
-                                                        </h3>
-                                                        <p className="text-gray-600 text-sm">
-                                                            Items requiring reauditing after rectification
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-sm text-gray-500">
-                                                        Showing {pendingData.length} entries
+                                    <div className="p-0">
+                                        <TabsContent value="pending" className="m-0">
+                                            <div className="p-6">
+                                                <div className="mb-4">
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                        <div>
+                                                            <h3 className="text-lg font-semibold">
+                                                                Pending Reaudit Entries
+                                                            </h3>
+                                                            <p className="text-gray-600 text-sm">
+                                                                Items requiring reauditing after rectification
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-sm text-gray-500">
+                                                            Showing {pendingData.length} entries
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div className="border rounded-lg overflow-hidden">
-                                                <DataTable
-                                                    data={pendingData}
-                                                    columns={pendingColumns}
-                                                    searchFields={['indentNo', 'productName', 'partyName', 'billNo', 'firmNameMatch']}
-                                                    dataLoading={false}
-                                                />
+                                                <div className="border rounded-lg overflow-hidden">
+                                                    <DataTable
+                                                        data={pendingData}
+                                                        columns={pendingColumns}
+                                                        searchFields={['indentNo', 'productName', 'vendorName', 'billNo', 'firmNameMatch']}
+                                                        dataLoading={false}
+                                                    />
+                                                </div>
                                             </div>
                                         </TabsContent>
 
-                                        <TabsContent value="history" className="mt-0">
-                                            <div className="mb-4">
-                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                    <div>
-                                                        <h3 className="text-lg font-semibold">
-                                                            Reaudit History
-                                                        </h3>
-                                                        <p className="text-gray-600 text-sm">
-                                                            Items that have been reaudited
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-sm text-gray-500">
-                                                        Showing {historyData.length} entries
+                                        <TabsContent value="history" className="m-0">
+                                            <div className="p-6">
+                                                <div className="mb-4">
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                        <div>
+                                                            <h3 className="text-lg font-semibold">
+                                                                Reaudit History
+                                                            </h3>
+                                                            <p className="text-gray-600 text-sm">
+                                                                Items that have been reaudited
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-sm text-gray-500">
+                                                            Showing {historyData.length} entries
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div className="border rounded-lg overflow-hidden">
-                                                <DataTable
-                                                    data={historyData}
-                                                    columns={historyColumns}
-                                                    searchFields={[
-                                                        'indentNo',
-                                                        'productName',
-                                                        'partyName',
-                                                        'billNo',
-                                                        'firmNameMatch',
-                                                        'status1',
-                                                        'status2',
-                                                        'status3',
-                                                    ]}
-                                                    dataLoading={false}
-                                                />
+                                                <div className="border rounded-lg overflow-hidden">
+                                                    <DataTable
+                                                        data={historyData}
+                                                        columns={historyColumns}
+                                                        searchFields={[
+                                                            'indentNo',
+                                                            'productName',
+                                                            'vendorName',
+                                                            'billNo',
+                                                            'firmNameMatch',
+                                                            'status1',
+                                                            'status2',
+                                                            'status3',
+                                                        ]}
+                                                        dataLoading={false}
+                                                    />
+                                                </div>
                                             </div>
                                         </TabsContent>
                                     </div>
@@ -984,172 +949,182 @@ export default () => {
                 </div>
 
                 {/* Dialog for Processing */}
-                {selectedItem && (
-                    <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <Form {...form}>
-                            <form
-                                onSubmit={form.handleSubmit(onSubmit, onError)}
-                                className="space-y-6"
-                            >
-                                <DialogHeader className="text-center">
-                                    <DialogTitle className="text-2xl">Process Reaudit</DialogTitle>
-                                    <DialogDescription>
-                                        Process reaudit for indent number{' '}
-                                        <span className="font-bold text-primary">{selectedItem.indentNo}</span>
-                                    </DialogDescription>
-                                </DialogHeader>
+                {
+                    selectedItem && (
+                        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <Form {...form}>
+                                <form
+                                    onSubmit={form.handleSubmit(onSubmit, onError)}
+                                    className="space-y-6"
+                                >
+                                    <DialogHeader className="text-center">
+                                        <DialogTitle className="text-2xl">Process Reaudit</DialogTitle>
+                                        <DialogDescription>
+                                            Process reaudit for indent number{' '}
+                                            <span className="font-bold text-primary">{selectedItem.indentNo}</span>
+                                        </DialogDescription>
+                                    </DialogHeader>
 
-                                <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-5 rounded-lg border">
-                                    <h3 className="text-lg font-bold mb-4 text-gray-800">Entry Details</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {[
-                                            { label: 'Indent No.', value: selectedItem.indentNo },
-                                            { label: 'Indent Date', value: formatDate(selectedItem.indentDate) },
-                                            { label: 'Purchase Date', value: formatDate(selectedItem.purchaseDate) },
-                                            { label: 'Material In Date', value: formatDate(selectedItem.materialInDate) },
-                                            { label: 'Product Name', value: selectedItem.productName },
-                                            { label: 'Bill No.', value: selectedItem.billNo },
-                                            { label: 'Firm Name', value: selectedItem.firmNameMatch },
-                                            { label: 'Quantity', value: selectedItem.qty },
-                                            { label: 'Party Name', value: selectedItem.partyName },
-                                            { label: 'Bill Amount', value: selectedItem.billAmt },
-                                            { label: 'Bill Received Later', value: selectedItem.billReceivedLater || 'N/A' },
-                                            { label: 'Not Received Bill No.', value: selectedItem.notReceivedBillNo || 'N/A' },
-                                            { label: 'Location', value: selectedItem.location },
-                                            { label: 'Type Of Bills', value: selectedItem.typeOfBills },
-                                            { label: 'Area', value: selectedItem.area },
-                                            { label: 'Indented For', value: selectedItem.indentedFor },
-                                            { label: 'Approved Party Name', value: selectedItem.approvedPartyName },
-                                            { label: 'Rate', value: selectedItem.rate },
-                                            { label: 'Indent Qty', value: selectedItem.indentQty },
-                                            { label: 'Total Rate', value: selectedItem.totalRate },
-                                            { label: 'Audit Status (Status 1)', value: selectedItem.status1 },
-                                            { label: 'Audit Remarks (Remarks 1)', value: selectedItem.remarks1 || 'N/A' },
-                                            { label: 'Rectification Status (Status 2)', value: selectedItem.status2 },
-                                            { label: 'Rectification Remarks (Remarks 2)', value: selectedItem.remarks2 || 'N/A' },
-                                        ].map((item, index) => (
-                                            <div key={index} className="space-y-1">
-                                                <p className="text-sm font-medium text-gray-500">{item.label}</p>
-                                                <p className="text-base font-semibold text-gray-800 break-words">
-                                                    {item.value || 'N/A'}
-                                                </p>
+                                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-5 rounded-lg border">
+                                        <h3 className="text-lg font-bold mb-4 text-gray-800">Entry Details</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            {[
+                                                { label: 'Indent No.', value: selectedItem.indentNo },
+                                                { label: 'Indent Date', value: formatDate(selectedItem.indentDate) },
+                                                { label: 'Purchase Date', value: formatDate(selectedItem.purchaseDate) },
+                                                { label: 'Material In Date', value: formatDate(selectedItem.materialInDate) },
+                                                { label: 'Product Name', value: selectedItem.productName },
+                                                { label: 'Bill No.', value: selectedItem.billNo },
+                                                { label: 'Firm Name', value: selectedItem.firmNameMatch },
+                                                { label: 'Quantity', value: selectedItem.qty },
+                                                { label: 'Vendor Name', value: selectedItem.vendorName },
+                                                { label: 'Bill Amount', value: selectedItem.billAmt },
+                                                { label: 'Bill Received Later', value: selectedItem.billReceivedLater || 'N/A' },
+                                                { label: 'Not Received Bill No.', value: selectedItem.notReceivedBillNo || 'N/A' },
+                                                { label: 'Location', value: selectedItem.location },
+                                                { label: 'Type Of Bills', value: selectedItem.typeOfBills },
+                                                { label: 'Area', value: selectedItem.area },
+                                                { label: 'Rate', value: selectedItem.rate },
+                                                { label: 'Indent Qty', value: selectedItem.indentQty },
+                                                { label: 'Total Rate', value: selectedItem.totalRate },
+                                                { label: 'Audit Status (Status 1)', value: selectedItem.status1 },
+                                                { label: 'Audit Remarks (Remarks 1)', value: selectedItem.remarks1 || 'N/A' },
+                                                { label: 'Rectification Status (Status 2)', value: selectedItem.status2 },
+                                                { label: 'Rectification Remarks (Remarks 2)', value: selectedItem.remarks2 || 'N/A' },
+                                            ].map((item, index) => (
+                                                <div key={index} className="space-y-1">
+                                                    <p className="text-sm font-medium text-gray-500">{item.label}</p>
+                                                    <p className="text-base font-semibold text-gray-800 break-words">
+                                                        {item.value || 'N/A'}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Image Links */}
+                                        <div className="mt-4 pt-4 border-t">
+                                            <div className="flex gap-6">
+                                                {selectedItem.billImage && selectedItem.billImage.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-gray-500">Bill Image</p>
+                                                        <div className="flex flex-col gap-1">
+                                                            {selectedItem.billImage.map((img, idx) => (
+                                                                <a
+                                                                    key={idx}
+                                                                    href={img}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-primary hover:underline font-semibold"
+                                                                >
+                                                                    View Bill Image {selectedItem.billImage.length > 1 ? idx + 1 : ''}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {selectedItem.productImage && selectedItem.productImage.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-medium text-gray-500">Product Image</p>
+                                                        <div className="flex flex-col gap-1">
+                                                            {selectedItem.productImage.map((img, idx) => (
+                                                                <a
+                                                                    key={idx}
+                                                                    href={img}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-primary hover:underline font-semibold"
+                                                                >
+                                                                    View Product Image {selectedItem.productImage.length > 1 ? idx + 1 : ''}
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        ))}
-                                    </div>
-                                    
-                                    {/* Image Links */}
-                                    <div className="mt-4 pt-4 border-t">
-                                        <div className="flex gap-6">
-                                            {selectedItem.billImage && (
-                                                <div className="space-y-1">
-                                                    <p className="text-sm font-medium text-gray-500">Bill Image</p>
-                                                    <a 
-                                                        href={selectedItem.billImage} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline font-semibold"
-                                                    >
-                                                        View Bill Image
-                                                    </a>
-                                                </div>
-                                            )}
-                                            {selectedItem.productImage && (
-                                                <div className="space-y-1">
-                                                    <p className="text-sm font-medium text-gray-500">Product Image</p>
-                                                    <a 
-                                                        href={selectedItem.productImage} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline font-semibold"
-                                                    >
-                                                        View Product Image
-                                                    </a>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-5">
-                                    <FormField
-                                        control={form.control}
-                                        name="status3"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-base">Reaudit Status *</FormLabel>
-                                                <Select
-                                                    onValueChange={field.onChange}
-                                                    value={field.value}
-                                                >
+                                    <div className="space-y-5">
+                                        <FormField
+                                            control={form.control}
+                                            name="status3"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-base">Reaudit Status *</FormLabel>
+                                                    <Select
+                                                        onValueChange={field.onChange}
+                                                        value={field.value}
+                                                    >
+                                                        <FormControl>
+                                                            <SelectTrigger className="h-12">
+                                                                <SelectValue placeholder="Select reaudit status" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="Done" className="py-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                                                    <span>Done</span>
+                                                                </div>
+                                                            </SelectItem>
+                                                            <SelectItem value="Not Done" className="py-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                                                    <span>Not Done</span>
+                                                                </div>
+                                                            </SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="remarks3"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-base">Reaudit Remarks *</FormLabel>
                                                     <FormControl>
-                                                        <SelectTrigger className="h-12">
-                                                            <SelectValue placeholder="Select reaudit status" />
-                                                        </SelectTrigger>
+                                                        <Textarea
+                                                            placeholder="Enter reaudit remarks here..."
+                                                            {...field}
+                                                            rows={4}
+                                                            className="resize-none"
+                                                        />
                                                     </FormControl>
-                                                    <SelectContent>
-                                                        <SelectItem value="Done" className="py-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                                <span>Done</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                        <SelectItem value="Not Done" className="py-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                                                <span>Not Done</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormItem>
-                                        )}
-                                    />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
 
-                                    <FormField
-                                        control={form.control}
-                                        name="remarks3"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-base">Reaudit Remarks *</FormLabel>
-                                                <FormControl>
-                                                    <Textarea
-                                                        placeholder="Enter reaudit remarks here..."
-                                                        {...field}
-                                                        rows={4}
-                                                        className="resize-none"
-                                                    />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
+                                    <DialogFooter className="flex flex-col sm:flex-row gap-3">
+                                        <DialogClose asChild>
+                                            <Button variant="outline" className="w-full sm:w-auto">
+                                                Cancel
+                                            </Button>
+                                        </DialogClose>
 
-                                <DialogFooter className="flex flex-col sm:flex-row gap-3">
-                                    <DialogClose asChild>
-                                        <Button variant="outline" className="w-full sm:w-auto">
-                                            Cancel
+                                        <Button
+                                            type="submit"
+                                            disabled={form.formState.isSubmitting}
+                                            className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
+                                        >
+                                            {form.formState.isSubmitting && (
+                                                <Loader
+                                                    size={20}
+                                                    color="white"
+                                                    className="mr-2"
+                                                />
+                                            )}
+                                            {form.formState.isSubmitting ? 'Processing...' : 'Update Reaudit'}
                                         </Button>
-                                    </DialogClose>
-
-                                    <Button 
-                                        type="submit" 
-                                        disabled={form.formState.isSubmitting}
-                                        className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
-                                    >
-                                        {form.formState.isSubmitting && (
-                                            <Loader
-                                                size={20}
-                                                color="white"
-                                                className="mr-2"
-                                            />
-                                        )}
-                                        {form.formState.isSubmitting ? 'Processing...' : 'Update Reaudit'}
-                                    </Button>
-                                </DialogFooter>
-                            </form>
-                        </Form>
-                    </DialogContent>
-                )}
+                                    </DialogFooter>
+                                </form>
+                            </Form>
+                        </DialogContent>
+                    )
+                }
             </Dialog>
         </div>
     );

@@ -5,11 +5,16 @@ import DataTable from '../element/DataTable';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
-import { CreditCard, ExternalLink, Truck, DollarSign, FileText, Package, MapPin, Receipt, Car } from 'lucide-react';
+import { CreditCard, ExternalLink, Truck, DollarSign, FileText, Package, MapPin, Receipt, Car, Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
+import { postToSheet } from '@/lib/fetchers';
+import { Loader2, Check, Clock, CheckCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 interface FreightPaymentData {
+    rowIndex?: number;
     indentNumber: string;
     vendorName: string;
     vehicleNumber: string;
@@ -20,16 +25,57 @@ interface FreightPaymentData {
     rateType: string;
     amount1: number;
     biltyImage: string;
-    
     firmNameMatch: string;
     paymentForm: string;  // Contains the Google Form link
     fFPPaymentNumber: string;
+    transportingInclude: string;
+    actual1?: string;
+    timestamp: string;
+    planned1: string;
 }
 
 export default function FreightPayment() {
-    const { fullkittingSheet, fullkittingLoading } = useSheets();
+    const { fullkittingSheet, fullkittingLoading, updateAll } = useSheets();
+
+    const formatDateTime = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            const time = date.toLocaleString('en-IN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            return `${d}/${m}/${y} ${time}`;
+        } catch {
+            return isoString;
+        }
+    };
+
+    const formatDateTiny = (isoString?: string) => {
+        if (!isoString) return '-';
+        try {
+            const date = new Date(isoString);
+            if (isNaN(date.getTime())) return isoString;
+            const d = date.getDate().toString().padStart(2, '0');
+            const m = (date.getMonth() + 1).toString().padStart(2, '0');
+            const y = date.getFullYear().toString().slice(-2);
+            return `${d}/${m}/${y}`;
+        } catch {
+            return isoString;
+        }
+    };
+
     const [tableData, setTableData] = useState<FreightPaymentData[]>([]);
+    const [historyData, setHistoryData] = useState<FreightPaymentData[]>([]);
+    const [activeTab, setActiveTab] = useState('pending');
     const { user } = useAuth();
+    const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+    const [submitting, setSubmitting] = useState(false);
 
     const [stats, setStats] = useState({
         total: 0,
@@ -40,18 +86,18 @@ export default function FreightPayment() {
     // Function to validate and clean Google Form URLs
     const getValidGoogleFormLink = useCallback((link: string): string => {
         if (!link || link.trim() === '') return '';
-        
+
         const trimmedLink = link.trim();
-        
+
         // Check if it's a valid Google Form URL
-        const isGoogleForm = trimmedLink.includes('docs.google.com/forms') || 
-                             trimmedLink.includes('forms.gle');
-        
+        const isGoogleForm = trimmedLink.includes('docs.google.com/forms') ||
+            trimmedLink.includes('forms.gle');
+
         // If it's already a Google Form link, return it as is
         if (isGoogleForm) {
             return trimmedLink.startsWith('http') ? trimmedLink : `https://${trimmedLink}`;
         }
-        
+
         // If it's not a Google Form, show error
         console.warn('Invalid Google Form link:', trimmedLink);
         return '';
@@ -60,7 +106,7 @@ export default function FreightPayment() {
     // Function to handle payment button click
     const handleMakePayment = useCallback((item: FreightPaymentData) => {
         const googleFormLink = getValidGoogleFormLink(item.paymentForm);
-        
+
         if (!googleFormLink) {
             toast.error('No valid Google Form link available for this item');
             return;
@@ -68,11 +114,11 @@ export default function FreightPayment() {
 
         // Open Google Form in a new tab with security attributes
         const newWindow = window.open(
-            googleFormLink, 
-            '_blank', 
+            googleFormLink,
+            '_blank',
             'noopener,noreferrer,width=800,height=600'
         );
-        
+
         if (newWindow) {
             newWindow.opener = null;
             toast.info(`Opening payment form for ${item.indentNumber}...`);
@@ -81,25 +127,78 @@ export default function FreightPayment() {
         }
     }, [getValidGoogleFormLink]);
 
+    const handleSelectRow = useCallback((rowIndex: number) => {
+        const newSelectedRows = new Set(selectedRows);
+        if (newSelectedRows.has(rowIndex)) {
+            newSelectedRows.delete(rowIndex);
+        } else {
+            newSelectedRows.add(rowIndex);
+        }
+        setSelectedRows(newSelectedRows);
+    }, [selectedRows]);
+
+    const handleSelectAll = useCallback(() => {
+        if (selectedRows.size === tableData.length) {
+            setSelectedRows(new Set());
+        } else {
+            setSelectedRows(new Set(tableData.map(item => item.rowIndex!).filter(Boolean)));
+        }
+    }, [selectedRows, tableData]);
+
+    const handleSubmitCompleted = async () => {
+        if (selectedRows.size === 0) {
+            toast.error('Please select at least one item');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const currentDateTime = new Date().toISOString();
+            const updates = Array.from(selectedRows).map(id => ({
+                rowIndex: id,
+                actual1: currentDateTime
+            }));
+
+            await postToSheet(updates, 'update', 'Fullkitting');
+            toast.success(`Successfully updated ${selectedRows.size} items`);
+            setSelectedRows(new Set());
+            updateAll();
+        } catch (error) {
+            console.error('Error updating items:', error);
+            toast.error('Failed to update items');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     useEffect(() => {
         // Filter items where Planned1 is not empty and Actual1 is empty
-        const filteredByFirm = fullkittingSheet.filter(item => 
+        const filteredByFirm = fullkittingSheet.filter(item =>
             user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
         );
 
-        const pendingItems = filteredByFirm.filter(item => 
-            item.planned1 && item.planned1 !== '' && (!item.actual1 || item.actual1 === '')
-        );
-        
-        const completedItems = filteredByFirm.filter(item => 
-            item.actual1 && item.actual1 !== ''
-        );
+        const pendingItems = filteredByFirm.filter(item => {
+            const planned1 = (item.planned1 || '').toString().trim();
+            const actual1 = (item.actual1 || '').toString().trim();
+            const hasPlanned = planned1 !== '' && planned1 !== 'N/A' && planned1 !== 'null' && planned1 !== 'undefined';
+            const hasActual = actual1 !== '' && actual1 !== 'N/A' && actual1 !== 'null' && actual1 !== 'undefined';
+
+            return item.transportingInclude === 'Yes' && hasPlanned && !hasActual;
+        });
+
+        const completedItems = filteredByFirm.filter(item => {
+            const actual1 = (item.actual1 || '').toString().trim();
+            const hasActual = actual1 !== '' && actual1 !== 'N/A' && actual1 !== 'null' && actual1 !== 'undefined';
+
+            return item.transportingInclude === 'Yes' && hasActual;
+        });
 
         // Process data and validate links
         const processedData = pendingItems.map((item) => {
             const paymentFormLink = getValidGoogleFormLink(item.paymentForm || '');
-            
+
             return {
+                rowIndex: item.rowIndex,
                 indentNumber: item.indentNumber || '',
                 vendorName: item.vendorName || '',
                 vehicleNumber: item.vehicleNumber || item.vehicleNo || '',
@@ -113,13 +212,43 @@ export default function FreightPayment() {
                 firmNameMatch: item.firmNameMatch || '',
                 paymentForm: paymentFormLink, // Store validated link
                 fFPPaymentNumber: item.fFPPaymentNumber || '',
+                transportingInclude: item.transportingInclude || '',
+                timestamp: item.timestamp || '',
+                planned1: item.planned1 || '',
             };
         });
 
         setTableData(processedData);
 
+        const processedHistoryData = completedItems.map((item) => {
+            const paymentFormLink = getValidGoogleFormLink(item.paymentForm || '');
+
+            return {
+                rowIndex: item.rowIndex,
+                indentNumber: item.indentNumber || '',
+                vendorName: item.vendorName || '',
+                vehicleNumber: item.vehicleNumber || item.vehicleNo || '',
+                from: item.from || '',
+                to: item.to || '',
+                materialLoadDetails: item.materialLoadDetails || '',
+                biltyNumber: item.biltyNumber || 0,
+                rateType: item.rateType || '',
+                amount1: item.amount1 || 0,
+                biltyImage: item.biltyImage || '',
+                firmNameMatch: item.firmNameMatch || '',
+                paymentForm: paymentFormLink,
+                fFPPaymentNumber: item.fFPPaymentNumber || '',
+                transportingInclude: item.transportingInclude || '',
+                actual1: item.actual1,
+                timestamp: item.timestamp || '',
+                planned1: item.planned1 || '',
+            };
+        });
+
+        setHistoryData(processedHistoryData);
+
         setStats({
-            total: filteredByFirm.length,
+            total: filteredByFirm.filter(item => item.transportingInclude === 'Yes').length,
             pending: pendingItems.length,
             completed: completedItems.length
         });
@@ -127,11 +256,26 @@ export default function FreightPayment() {
 
     const columns: ColumnDef<FreightPaymentData>[] = [
         {
+            id: 'select',
+            header: () => (
+                <Checkbox
+                    checked={selectedRows.size === tableData.length && tableData.length > 0}
+                    onCheckedChange={() => handleSelectAll()}
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={selectedRows.has(row.original.rowIndex!)}
+                    onCheckedChange={() => handleSelectRow(row.original.rowIndex!)}
+                />
+            ),
+        },
+        {
             header: 'Action',
             cell: ({ row }: { row: Row<FreightPaymentData> }) => {
                 const item = row.original;
                 const hasValidLink = item.paymentForm && item.paymentForm !== '';
-                
+
                 return (
                     <Button
                         variant="default"
@@ -146,15 +290,39 @@ export default function FreightPayment() {
                 );
             },
         },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'timestamp',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Timestamp</span>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm text-gray-600">{formatDateTime(row.original.timestamp)}</span>
+            )
+        },
+        {
+            accessorKey: 'planned1',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Planned Date</span>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm">{formatDateTiny(row.original.planned1)}</span>
+            )
+        },
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => (
                 <span className="font-medium text-blue-700">{row.original.indentNumber}</span>
             )
         },
-        { 
-            accessorKey: 'firmNameMatch', 
+        {
+            accessorKey: 'firmNameMatch',
             header: 'Firm',
             cell: ({ row }) => (
                 <Badge variant="outline" className="bg-gray-50">
@@ -162,15 +330,15 @@ export default function FreightPayment() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'vendorName', 
+        {
+            accessorKey: 'vendorName',
             header: 'Vendor Name',
             cell: ({ row }) => (
                 <span className="font-medium">{row.original.vendorName}</span>
             )
         },
-        { 
-            accessorKey: 'vehicleNumber', 
+        {
+            accessorKey: 'vehicleNumber',
             header: 'Vehicle No.',
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
@@ -179,8 +347,8 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'from', 
+        {
+            accessorKey: 'from',
             header: 'From',
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
@@ -189,8 +357,8 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'to', 
+        {
+            accessorKey: 'to',
             header: 'To',
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
@@ -199,8 +367,8 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'materialLoadDetails', 
+        {
+            accessorKey: 'materialLoadDetails',
             header: 'Material Details',
             cell: ({ row }) => (
                 <div className="max-w-[150px] truncate" title={row.original.materialLoadDetails}>
@@ -209,8 +377,8 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'biltyNumber', 
+        {
+            accessorKey: 'biltyNumber',
             header: 'Bilty No.',
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
@@ -219,8 +387,8 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'rateType', 
+        {
+            accessorKey: 'rateType',
             header: 'Rate Type',
             cell: ({ row }) => (
                 <Badge variant="outline" className={row.original.rateType === 'Fixed' ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}>
@@ -228,8 +396,8 @@ export default function FreightPayment() {
                 </Badge>
             )
         },
-        { 
-            accessorKey: 'amount1', 
+        {
+            accessorKey: 'amount1',
             header: 'Amount',
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
@@ -238,14 +406,14 @@ export default function FreightPayment() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'biltyImage', 
+        {
+            accessorKey: 'biltyImage',
             header: 'Bilty Image',
             cell: ({ row }) => (
                 row.original.biltyImage ? (
-                    <a 
-                        href={row.original.biltyImage} 
-                        target="_blank" 
+                    <a
+                        href={row.original.biltyImage}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 text-sm underline flex items-center gap-1"
                     >
@@ -257,37 +425,31 @@ export default function FreightPayment() {
                 )
             )
         },
-        // { 
-        //     accessorKey: 'paymentForm', 
-        //     header: 'Form Link',
-        //     cell: ({ row }) => {
-        //         const link = row.original.paymentForm;
-        //         return link ? (
-        //             <a 
-        //                 href={link} 
-        //                 target="_blank" 
-        //                 rel="noopener noreferrer"
-        //                 className="text-blue-600 hover:text-blue-800 text-sm underline flex items-center gap-1"
-        //                 onClick={(e) => {
-        //                     e.preventDefault();
-        //                     handleMakePayment(row.original);
-        //                 }}
-        //             >
-        //                 <ExternalLink size={12} />
-        //                 Open Form
-        //             </a>
-        //         ) : (
-        //             <span className="text-gray-400 text-sm">No Link</span>
-        //         );
         //     }
         // },
-        // { 
-        //     accessorKey: 'fFPPaymentNumber', 
+        // {
+        //     accessorKey: 'fFPPaymentNumber',
         //     header: 'FFP No.',
         //     cell: ({ row }) => (
         //         <span className="font-medium text-purple-700">{row.original.fFPPaymentNumber || '-'}</span>
         //     )
         // },
+    ];
+
+    const historyColumns: ColumnDef<FreightPaymentData>[] = [
+        ...columns.filter(col => col.id !== 'select' && (col as any).header !== 'Action'),
+        {
+            accessorKey: 'actual1',
+            header: () => (
+                <div className="flex items-center justify-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>Payment Date</span>
+                </div>
+            ),
+            cell: ({ row }) => (
+                <span className="text-sm">{formatDateTiny(row.original.actual1)}</span>
+            )
+        }
     ];
 
     return (
@@ -318,7 +480,7 @@ export default function FreightPayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -332,7 +494,7 @@ export default function FreightPayment() {
                                 </div>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-white shadow border-0 hover:shadow-md transition-shadow">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
@@ -349,34 +511,106 @@ export default function FreightPayment() {
                     </div>
                 </div>
 
-                {/* Main Content Card */}
-                <Card className="bg-white shadow-lg border-0 mb-6">
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-xl font-bold text-gray-800">
-                                    Pending Freight Payments ({stats.pending})
-                                </CardTitle>
-                                <p className="text-gray-600 text-sm mt-1">
-                                    Items with Planned1 date but no Actual1 date
-                                </p>
-                            </div>
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                {stats.pending} Pending
+                {/* Tabs Section */}
+                <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="mb-6 bg-white shadow-sm border p-1 rounded-xl flex gap-1 justify-start">
+                        <TabsTrigger
+                            value="pending"
+                            className="flex justify-center items-center gap-2 data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-sm px-6 py-2.5 rounded-lg transition-all"
+                        >
+                            <Clock size={16} className={activeTab === 'pending' ? 'text-amber-500' : 'text-gray-400'} />
+                            Pending Payments
+                            <Badge variant="secondary" className="ml-2 bg-white/60">
+                                {stats.pending}
                             </Badge>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                    
-                        <DataTable
-                            data={tableData}
-                            columns={columns}
-                            searchFields={['indentNumber', 'vendorName', 'vehicleNumber', 'from', 'to', 'biltyNumber', 'fFPPaymentNumber']}
-                            dataLoading={fullkittingLoading}
-                            className="border rounded-lg"
-                        />
-                    </CardContent>
-                </Card>
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="history"
+                            className="flex justify-center items-center gap-2 data-[state=active]:bg-green-50 data-[state=active]:text-green-700 data-[state=active]:shadow-sm px-6 py-2.5 rounded-lg transition-all"
+                        >
+                            <CheckCircle size={16} className={activeTab === 'history' ? 'text-green-500' : 'text-gray-400'} />
+                            Payment History
+                            <Badge variant="secondary" className="ml-2 bg-white/60">
+                                {stats.completed}
+                            </Badge>
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="pending" className="mt-0">
+                        <Card className="bg-white shadow-lg border-0 mb-6 ring-1 ring-gray-100">
+                            <CardHeader className="pb-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-xl font-bold text-gray-800">
+                                            Pending Freight Payments ({stats.pending})
+                                        </CardTitle>
+                                        <p className="text-gray-600 text-sm mt-1">
+                                            Items with Planned1 date but no Actual1 date
+                                        </p>
+                                    </div>
+                                </div>
+                                {selectedRows.size > 0 && (
+                                    <div className="flex gap-2 mt-4">
+                                        <Button
+                                            onClick={handleSubmitCompleted}
+                                            disabled={submitting}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg animate-in fade-in slide-in-from-top-2"
+                                        >
+                                            {submitting ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Check className="mr-2 h-4 w-4" />
+                                            )}
+                                            Submit {selectedRows.size} Selected as Completed
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setSelectedRows(new Set())}
+                                            disabled={submitting}
+                                        >
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                )}
+                            </CardHeader>
+                            <CardContent>
+                                <DataTable
+                                    data={tableData}
+                                    columns={columns}
+                                    searchFields={['indentNumber', 'vendorName', 'vehicleNumber', 'from', 'to', 'biltyNumber', 'fFPPaymentNumber']}
+                                    dataLoading={fullkittingLoading}
+                                    className="border rounded-lg"
+                                />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="history" className="mt-0">
+                        <Card className="bg-white shadow-lg border-0 mb-6 ring-1 ring-gray-100">
+                            <CardHeader className="pb-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-xl font-bold text-gray-800">
+                                            Completed Freight Payments History
+                                        </CardTitle>
+                                        <p className="text-gray-600 text-sm mt-1">
+                                            Items where payment has been successfully recorded
+                                        </p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <DataTable
+                                    data={historyData}
+                                    columns={historyColumns}
+                                    searchFields={['indentNumber', 'vendorName', 'vehicleNumber', 'from', 'to', 'biltyNumber', 'fFPPaymentNumber', 'actual1']}
+                                    dataLoading={fullkittingLoading}
+                                    className="border rounded-lg"
+                                />
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
         </div>
     );

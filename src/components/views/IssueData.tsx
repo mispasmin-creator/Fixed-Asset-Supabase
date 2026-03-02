@@ -73,7 +73,7 @@ export default () => {
     useEffect(() => {
         setTableData(
             issueSheet
-                .filter((sheet) => sheet.planned1 !== '' && sheet.actual1 === '')
+                .filter((sheet) => sheet.planned1 && sheet.planned1 !== '' && !sheet.actual1)
                 .map((sheet) => ({
                     issueNo: sheet.issueNo,
                     issueTo: sheet.issueTo,
@@ -90,7 +90,7 @@ export default () => {
     useEffect(() => {
         setHistoryData(
             issueSheet
-                .filter((sheet) => sheet.planned1 !== '' && sheet.actual1 !== '')
+                .filter((sheet) => sheet.planned1 && sheet.planned1 !== '' && sheet.actual1)
                 .map((sheet) => ({
                     issueNo: sheet.issueNo,
                     issueTo: sheet.issueTo,
@@ -260,17 +260,18 @@ export default () => {
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
             await postToSheet(
-    issueSheet
-        .filter((s) => s.issueNo === selectedIndent?.issueNo)
-        .map((prev) => ({
-            rowIndex: prev.rowIndex,   // keep rowIndex only
-            actual1: new Date().toISOString(),
-            status: values.status,
-            givenQty: values.status === 'Yes' ? values.givenQty : '',
-        })),
-    'update',
-    'ISSUE'
-);
+                issueSheet
+                    .filter((s) => s.issueNo === selectedIndent?.issueNo)
+                    .map((prev) => ({
+                        rowIndex: prev.rowIndex,
+                        issueNo: prev.issueNo,
+                        actual1: new Date().toISOString(),
+                        status: values.status,
+                        givenQty: values.status === 'Yes' ? values.givenQty : '',
+                    })),
+                'update',
+                'ISSUE'
+            );
 
             toast.success(`Updated approval status of ${selectedIndent?.issueNo}`);
             setOpenDialog(false);

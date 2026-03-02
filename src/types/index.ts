@@ -1,5 +1,5 @@
-export type { MasterSheet, IndentSheet, ReceivedSheet, Sheet, allPermissionKeys, Vendor, UserPermissions, InventorySheet, IssueSheet, StoreInSheet , TallyEntrySheet , PcReportSheet , FullkittingSheet ,PaymentHistory,PIApprovalSheet} from "./sheets";
-export { type ProductFormValues,type ProductItemProps, type Options,type  FormValues, formSchema } from "./indentForm";
+export type { MasterSheet, IndentSheet, ReceivedSheet, Sheet, allPermissionKeys, Vendor, UserPermissions, InventorySheet, IssueSheet, StoreInSheet, TallyEntrySheet, FullkittingSheet, PaymentHistory, PIApprovalSheet } from "./sheets";
+export { type ProductFormValues, type ProductItemProps, type Options, type FormValues, formSchema } from "./indentForm";
 export { type RouteAttributes } from "./routes";
 export type PoMasterSheet = {
     rowIndex?: number;
@@ -42,15 +42,19 @@ export type PoMasterSheet = {
     deliveryType: string;
     firmNameMatch: string;
     emailSendStatus?: string;
-    
+
     // ✅ CORRECT: Match exact Google Sheet column names
     'Guarantee'?: string;
     'Freight Payment'?: string;
-    
+    status?: string;
+    totalPaidAmount?: number;
+    outstandingAmount?: number;
+
     // Optional: PI Approval fields
     piApprovalTimestamp?: string;
     piQty?: number;
     piAmount?: number;
     piCopy?: string;
     poRateWithoutTax?: number;
+    companyEmail?: string;
 };

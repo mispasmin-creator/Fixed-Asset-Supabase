@@ -5,13 +5,130 @@ import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
 import { Badge } from '../ui/badge';
-import type { PcReportSheet } from '@/types';
+interface StageStats {
+    stage: string;
+    totalPending: number;
+    totalComplete: number;
+    pendingPmpl: number;
+    pendingPurab: number;
+    pendingPmmpl: number;
+    pendingRefrasynth: number;
+}
 import { useAuth } from '@/context/AuthContext';
 
 export default function PcReportTable() {
-    const { pcReportSheet, poMasterLoading } = useSheets();
-    const [historyData, setHistoryData] = useState<PcReportSheet[]>([]);
+    const {
+        issueSheet,
+        indentSheet,
+        storeInSheet,
+        tallyEntrySheet,
+        piApprovalSheet,
+        poMasterLoading
+    } = useSheets();
+    const [historyData, setHistoryData] = useState<StageStats[]>([]);
     const { user } = useAuth();
+
+    // Helper function to calculate stats for each stage
+    const calculateStageStats = () => {
+        const isFirmMatch = (item: any, firm?: string) => {
+            const firmMatch = item.firmNameMatch || item.firmName || '';
+            const matchesUserFilter = user.firmNameMatch.toLowerCase() === "all" || firmMatch === user.firmNameMatch;
+
+            if (firm) {
+                return firmMatch === firm && matchesUserFilter;
+            }
+            return matchesUserFilter;
+        };
+
+        const getStats = (sheet: any[], filterPending: (s: any) => boolean, filterComplete: (s: any) => boolean) => {
+            return {
+                totalPending: sheet.filter(s => isFirmMatch(s) && filterPending(s)).length,
+                totalComplete: sheet.filter(s => isFirmMatch(s) && filterComplete(s)).length,
+                pendingPmpl: sheet.filter(s => isFirmMatch(s, "PMPL") && filterPending(s)).length,
+                pendingPurab: sheet.filter(s => isFirmMatch(s, "PURAB") && filterPending(s)).length,
+                pendingPmmpl: sheet.filter(s => isFirmMatch(s, "PMMPL") && filterPending(s)).length,
+                pendingRefrasynth: sheet.filter(s => isFirmMatch(s, "REFRASYNTH") && filterPending(s)).length,
+            };
+        };
+
+        const stages = [
+            {
+                stage: "Issue Data",
+                ...getStats(issueSheet, s => s.planned1 && !s.actual1, s => s.planned1 && s.actual1)
+            },
+            {
+                stage: "Should Need Offer Or Regular",
+                ...getStats(indentSheet, s => s.planned1 && !s.actual1, s => s.planned1 && s.actual1)
+            },
+            {
+                stage: "Reguler Or Need Offer Rate Update",
+                ...getStats(indentSheet, s => s.planned2 && !s.actual2, s => s.planned2 && s.actual2)
+            },
+            {
+                stage: "Approval And Rejection For Purchase",
+                ...getStats(indentSheet, s => s.planned3 && !s.actual3 && s.vendorType === 'Three Party', s => s.planned3 && s.actual3 && s.vendorType === 'Three Party')
+            },
+            {
+                stage: "PO WebApp",
+                ...getStats(indentSheet, s => s.planned4 && !s.actual4, s => s.planned4 && s.actual4)
+            },
+            {
+                stage: "Material Lifting",
+                ...getStats(indentSheet,
+                    s => s.liftingStatus === 'Pending' && s.planned5,
+                    s => s.liftingStatus === 'Received' && s.planned5
+                )
+            },
+            {
+                stage: "Received In Store",
+                ...getStats(storeInSheet, s => s.planned6 && !s.actual6, s => s.planned6 && s.actual6)
+            },
+            {
+                stage: "Quality Check In Received Item",
+                ...getStats(storeInSheet,
+                    s => s.planned7 && !s.actual7 && s.status !== 'reject',
+                    s => s.planned7 && s.actual7
+                )
+            },
+            {
+                stage: "Send Debit Note",
+                ...getStats(storeInSheet, s => s.planned9 && !s.actual9, s => s.planned9 && s.actual9)
+            },
+            {
+                stage: "Bill Not Received",
+                ...getStats(storeInSheet, s => s.planned11 && !s.actual11, s => s.planned11 && s.actual11)
+            },
+            {
+                stage: "Audit Data",
+                ...getStats(tallyEntrySheet,
+                    s => !s.isCompleted && (s.planned1 || s.planned2 || s.planned3 || s.planned4 || s.planned5),
+                    s => s.isCompleted
+                )
+            },
+            {
+                stage: "Rectify the mistake",
+                ...getStats(tallyEntrySheet, s => s.planned2 && !s.actual2, s => s.planned2 && s.actual2)
+            },
+            {
+                stage: "Reaudit Data",
+                ...getStats(tallyEntrySheet, s => s.planned3 && !s.actual3, s => s.planned3 && s.actual3)
+            },
+            {
+                stage: "Take Entry By Tally",
+                ...getStats(tallyEntrySheet, s => s.planned4 && !s.actual4, s => s.planned4 && s.actual4)
+            },
+            {
+                stage: "Again Audit",
+                ...getStats(tallyEntrySheet, s => s.planned5 && !s.actual5, s => s.planned5 && s.actual5)
+            },
+            {
+                stage: "Return Material To Party",
+                ...getStats(storeInSheet, s => s.planned8 && !s.actual8, s => s.planned8 && s.actual8)
+            }
+        ];
+
+        return stages;
+    };
 
     // Calculate totals
     const calculateTotals = () => {
@@ -36,23 +153,17 @@ export default function PcReportTable() {
         return totals;
     };
 
+    useEffect(() => {
+        const liveStats = calculateStageStats();
+        setHistoryData(liveStats as StageStats[]);
+    }, [issueSheet, indentSheet, storeInSheet, tallyEntrySheet, piApprovalSheet, user.firmNameMatch]);
+
     const totals = calculateTotals();
 
-    useEffect(() => {
-        console.log("PC Report Sheet:", pcReportSheet);
-        
-        // Filter by firm name (case-insensitive)
-        const filteredByFirm = pcReportSheet.filter(item => 
-            user.firmNameMatch.toLowerCase() === "all" || item.firmNameMatch === user.firmNameMatch
-        );
-        
-        setHistoryData(filteredByFirm);
-    }, [pcReportSheet, user.firmNameMatch]);
-
-    // Columns for PcReportSheet
-    const historyColumns: ColumnDef<PcReportSheet>[] = [
-        { 
-            accessorKey: 'stage', 
+    // Columns for StageStats
+    const historyColumns: ColumnDef<StageStats>[] = [
+        {
+            accessorKey: 'stage',
             header: 'Stage',
             cell: ({ row }) => (
                 <div className="text-center">
@@ -60,8 +171,8 @@ export default function PcReportTable() {
                 </div>
             )
         },
-        { 
-            accessorKey: 'totalPending', 
+        {
+            accessorKey: 'totalPending',
             header: 'Total Pending',
             cell: ({ row }) => {
                 const value = Number(row.original.totalPending) || 0;
@@ -74,8 +185,8 @@ export default function PcReportTable() {
                 );
             }
         },
-        { 
-            accessorKey: 'totalComplete', 
+        {
+            accessorKey: 'totalComplete',
             header: 'Total Complete',
             cell: ({ row }) => {
                 const value = Number(row.original.totalComplete) || 0;
@@ -88,8 +199,8 @@ export default function PcReportTable() {
                 );
             }
         },
-        { 
-            accessorKey: 'pendingPmpl', 
+        {
+            accessorKey: 'pendingPmpl',
             header: 'Pending PMPL',
             cell: ({ row }) => {
                 const value = Number(row.original.pendingPmpl) || 0;
@@ -102,8 +213,8 @@ export default function PcReportTable() {
                 );
             }
         },
-        { 
-            accessorKey: 'pendingPurab', 
+        {
+            accessorKey: 'pendingPurab',
             header: 'Pending PURAB',
             cell: ({ row }) => {
                 const value = Number(row.original.pendingPurab) || 0;
@@ -116,8 +227,8 @@ export default function PcReportTable() {
                 );
             }
         },
-        { 
-            accessorKey: 'pendingPmmpl', 
+        {
+            accessorKey: 'pendingPmmpl',
             header: 'Pending PMMPL',
             cell: ({ row }) => {
                 const value = Number(row.original.pendingPmmpl) || 0;
@@ -130,8 +241,8 @@ export default function PcReportTable() {
                 );
             }
         },
-        { 
-            accessorKey: 'pendingRefrasynth', 
+        {
+            accessorKey: 'pendingRefrasynth',
             header: 'Pending REFRASYNTH',
             cell: ({ row }) => {
                 const value = Number(row.original.pendingRefrasynth) || 0;
